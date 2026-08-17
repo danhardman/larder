@@ -1,0 +1,65 @@
+import type { Meal, Slot, Unit } from '../types'
+
+export interface Contribution {
+  mealName: string
+  /** Amount this meal calls for on its own. */
+  each: number
+  /** How many times the meal appears in the week. */
+  times: number
+}
+
+export interface ShoppingLine {
+  name: string
+  unit: Unit
+  total: number
+  contributions: Contribution[]
+}
+
+export function round1(n: number): number {
+  return Math.round(n * 10) / 10
+}
+
+/**
+ * Group by (name, unit) and sum — you can only add compatible units, so `500 g`
+ * and `2 piece` of the same ingredient stay separate lines. Pure: no Firebase.
+ */
+export function buildShoppingList(slots: Slot[], meals: Meal[]): ShoppingLine[] {
+  const byId = new Map(meals.map((m) => [m.id, m]))
+  const groups = new Map<string, ShoppingLine>()
+
+  for (const slot of slots) {
+    const meal = slot.mealId ? byId.get(slot.mealId) : undefined
+    if (!meal) continue
+    for (const item of meal.ingredients) {
+      if (!item.name.trim()) continue
+      const key = `${item.name}|${item.unit}`
+      let line = groups.get(key)
+      if (!line) {
+        line = { name: item.name, unit: item.unit, total: 0, contributions: [] }
+        groups.set(key, line)
+      }
+      line.total = round1(line.total + item.quantity)
+      const existing = line.contributions.find((c) => c.mealName === meal.name)
+      if (existing) existing.times += 1
+      else line.contributions.push({ mealName: meal.name, each: item.quantity, times: 1 })
+    }
+  }
+
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function formatContribution(c: Contribution, unit: Unit): string {
+  return c.times > 1
+    ? `${c.mealName} ×${c.times} (${round1(c.each)} ${unit} each)`
+    : `${c.mealName} ${round1(c.each)} ${unit}`
+}
+
+export function formatShoppingList(lines: ShoppingLine[], weekLabel: string): string {
+  const body = lines
+    .map((line) => {
+      const breakdown = line.contributions.map((c) => formatContribution(c, line.unit)).join(' + ')
+      return `${round1(line.total)} ${line.unit} — ${line.name}\n   ↳ ${breakdown}`
+    })
+    .join('\n\n')
+  return `Shopping list — w/c ${weekLabel}\n\n${body}\n`
+}

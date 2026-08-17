@@ -16,10 +16,10 @@ export default defineConfig({
         description: 'Household meal planning and shopping lists',
         start_url: '/',
         display: 'standalone',
-        background_color: '#ffffff',
-        theme_color: '#ffffff',
-        // Icons intentionally omitted until the design pass.
-        icons: [],
+        background_color: '#f5ead8',
+        theme_color: '#f5ead8',
+        // Raster icons still to come; the SVG mark covers the browser tab.
+        icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
       },
     }),
   ],
