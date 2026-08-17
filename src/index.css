@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+
+/* Design tokens land here in the design pass — colours, fonts, spacing scale. */
+@theme {
+}
+
+html {
+  /* Phone-first: stop iOS Safari zooming/rubber-banding oddly on inputs. */
+  -webkit-text-size-adjust: 100%;
+}

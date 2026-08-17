@@ -1,0 +1,6 @@
+# pnpm 11 reads settings from here, not from the "pnpm" field in package.json.
+# Firebase's transitive deps run postinstall scripts; deciding on them here
+# avoids the ERR_PNPM_IGNORED_BUILDS error that otherwise fails every command.
+allowBuilds:
+  '@firebase/util': true
+  protobufjs: true
