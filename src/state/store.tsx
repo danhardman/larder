@@ -2,13 +2,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { currentSeason } from '../lib/dates'
 import { generatePlan } from '../lib/generatePlan'
 import { randomSeed } from '../lib/rng'
-import { statsByMeal, type MealStats } from '../lib/stats'
+import { mealsInUse, statsByMeal, type MealStats } from '../lib/stats'
 import { loadData, newId, saveData, type LarderData } from '../lib/storage'
 import type { Meal, Settings, Slot, WeekPlan } from '../types'
 
 interface LarderStore extends LarderData {
   plansList: WeekPlan[]
   stats: Map<string, MealStats>
+  /** Meals a plan still points at — archivable, but not safe to delete outright. */
+  usedMealIds: Set<string>
   planFor: (weekStart: string) => WeekPlan | undefined
   /** Draft a week from scratch, keeping any locked slots already in place. */
   draftWeek: (weekStart: string) => { thin: string[] }
@@ -16,7 +18,8 @@ interface LarderStore extends LarderData {
   reopenWeek: (weekStart: string) => void
   patchSlot: (weekStart: string, index: number, changes: Partial<Slot>) => void
   saveMeal: (meal: Meal) => void
-  archiveMeal: (mealId: string) => void
+  setMealArchived: (mealId: string, archived: boolean) => void
+  deleteMeal: (mealId: string) => void
   toggleTick: (weekStart: string, key: string) => void
   updateSettings: (changes: Partial<Settings>) => void
 }
@@ -32,6 +35,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
 
   const plansList = useMemo(() => Object.values(data.plans), [data.plans])
   const stats = useMemo(() => statsByMeal(plansList), [plansList])
+  const usedMealIds = useMemo(() => mealsInUse(plansList), [plansList])
 
   const planFor = useCallback((weekStart: string) => data.plans[weekStart], [data.plans])
 
@@ -101,11 +105,20 @@ export function LarderProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const archiveMeal = useCallback((mealId: string) => {
+  const setMealArchived = useCallback((mealId: string, archived: boolean) => {
     setData((prev) => ({
       ...prev,
-      meals: prev.meals.map((m) => (m.id === mealId ? { ...m, archived: true } : m)),
+      meals: prev.meals.map((m) => (m.id === mealId ? { ...m, archived } : m)),
     }))
+  }, [])
+
+  /**
+   * Hard delete. Plans keep their denormalised `mealName`, so past weeks still
+   * read correctly — callers gate this on `usedMealIds` to protect the lists
+   * that do resolve by id.
+   */
+  const deleteMeal = useCallback((mealId: string) => {
+    setData((prev) => ({ ...prev, meals: prev.meals.filter((m) => m.id !== mealId) }))
   }, [])
 
   const toggleTick = useCallback((weekStart: string, key: string) => {
@@ -125,13 +138,15 @@ export function LarderProvider({ children }: { children: ReactNode }) {
     ...data,
     plansList,
     stats,
+    usedMealIds,
     planFor,
     draftWeek,
     acceptWeek,
     reopenWeek,
     patchSlot,
     saveMeal,
-    archiveMeal,
+    setMealArchived,
+    deleteMeal,
     toggleTick,
     updateSettings,
   }

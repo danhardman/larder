@@ -42,6 +42,20 @@ export function statsByMeal(plans: WeekPlan[]): Map<string, MealStats> {
   return out
 }
 
+/**
+ * Meal ids referenced by any saved plan. Drafts count too: their shopping list
+ * still resolves ingredients by id, so deleting the meal would quietly empty it.
+ */
+export function mealsInUse(plans: WeekPlan[]): Set<string> {
+  const out = new Set<string>()
+  for (const plan of plans) {
+    for (const slot of plan.slots) {
+      if (slot.mealId) out.add(slot.mealId)
+    }
+  }
+  return out
+}
+
 /** Minimum rated cooks before any advice — below this one heavy night misleads. */
 const MIN_RATED_COOKS = 3
 

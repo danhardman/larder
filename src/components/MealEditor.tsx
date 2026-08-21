@@ -15,15 +15,20 @@ import {
   type Season,
   type Unit,
 } from '../types'
-import { ArrowLeftIcon, MinusIcon, PlusIcon } from './icons'
+import { ArchiveIcon, ArrowLeftIcon, MinusIcon, PlusIcon, TrashIcon, UndoIcon } from './icons'
 
 interface MealEditorProps {
   meal: Meal | null
   /** Ingredient names already used across the library, most common first. */
   catalog: string[]
   warning: string | null
+  /** True when a plan still points at this meal, which rules out deleting it. */
+  used: boolean
   onSave: (meal: Meal) => void
   onCancel: () => void
+  onArchive: (meal: Meal) => void
+  onRestore: (meal: Meal) => void
+  onDelete: (meal: Meal) => void
 }
 
 function blankIngredient(name = '', quantity = 1, unit: Unit = 'g'): MealIngredient {
@@ -38,7 +43,17 @@ function chipClass(on: boolean): string {
 
 const LABEL = 'text-[12px] font-bold tracking-[0.04em] uppercase text-neutral-600'
 
-export function MealEditor({ meal, catalog, warning, onSave, onCancel }: MealEditorProps) {
+export function MealEditor({
+  meal,
+  catalog,
+  warning,
+  used,
+  onSave,
+  onCancel,
+  onArchive,
+  onRestore,
+  onDelete,
+}: MealEditorProps) {
   const [name, setName] = useState(meal?.name ?? '')
   const [mealTypes, setMealTypes] = useState<MealType[]>(meal?.mealTypes ?? ['dinner'])
   const [protein, setProtein] = useState<Protein>(meal?.protein ?? 'chicken')
@@ -313,6 +328,39 @@ export function MealEditor({ meal, catalog, warning, onSave, onCancel }: MealEdi
           <PlusIcon size={15} />
           Another ingredient
         </button>
+
+        {/* The swipe actions in the library, spelled out — this is the path for
+            anyone not using a touchscreen. */}
+        {meal && (
+          <div className="mt-7 border-t border-divider pt-4">
+            <div className={LABEL}>Tidying up</div>
+            <div className="mt-[10px] flex flex-wrap gap-[9px]">
+              <button
+                type="button"
+                onClick={() => (meal.archived ? onRestore(meal) : onArchive(meal))}
+                className="btn btn-secondary gap-[7px] py-[10px] font-semibold"
+              >
+                {meal.archived ? <UndoIcon size={15} /> : <ArchiveIcon size={15} />}
+                {meal.archived ? 'Restore to the library' : 'Archive it'}
+              </button>
+              <button
+                type="button"
+                disabled={used}
+                onClick={() => onDelete(meal)}
+                className="btn btn-secondary gap-[7px] py-[10px] font-semibold text-accent-700"
+              >
+                <TrashIcon size={15} />
+                Delete for good
+              </button>
+            </div>
+            <div className="mt-[9px] text-[12px] leading-[1.5] text-neutral-600">
+              {used
+                ? 'This one’s in a saved week, so it can’t be deleted — archive it and the history still adds up.'
+                : 'Archiving hides it from planning but keeps it around. Deleting is forever.'}
+            </div>
+          </div>
+        )}
+
         <div className="h-20" />
       </div>
 

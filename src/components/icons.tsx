@@ -117,3 +117,27 @@ export const CopyIcon = icon(
     <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
   </>,
 )
+
+export const ArchiveIcon = icon(
+  <>
+    <rect x="3" y="4" width="18" height="5" rx="1.5" />
+    <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 14h4" />
+  </>,
+  2.5,
+)
+
+export const TrashIcon = icon(
+  <>
+    <path d="M4 7h16M10 4h4M9 11v6M15 11v6" />
+    <path d="M6 7v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7" />
+  </>,
+  2.5,
+)
+
+export const UndoIcon = icon(
+  <>
+    <path d="M4 5v6h6" />
+    <path d="M4.5 11a8 8 0 1 1 1.8 8" />
+  </>,
+  2.5,
+)

@@ -48,6 +48,8 @@ export default function App() {
   const [portionFor, setPortionFor] = useState<{ weekStart: string; index: number } | null>(null)
   const [editor, setEditor] = useState<{ meal: Meal | null } | null>(null)
   const [query, setQuery] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<Meal | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [thinHint, setThinHint] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -216,6 +218,18 @@ export default function App() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name)
   }, [store.meals])
 
+  const archiveMeal = (meal: Meal) => {
+    store.setMealArchived(meal.id, true)
+    setEditor(null)
+    say(`${meal.name} archived — past weeks still count it.`)
+  }
+
+  const restoreMeal = (meal: Meal) => {
+    store.setMealArchived(meal.id, false)
+    setEditor(null)
+    say(`${meal.name} is back in the rotation.`)
+  }
+
   const showActionBar =
     screen === 'weeks' && week.offset >= 0 && week.plan?.status === 'draft' && !sheet && !editor
   const showFab = screen === 'library' && !editor
@@ -271,7 +285,13 @@ export default function App() {
               stats={store.stats}
               query={query}
               onQuery={setQuery}
+              showArchived={showArchived}
+              onShowArchived={setShowArchived}
+              usedMealIds={store.usedMealIds}
               onEditMeal={(meal) => setEditor({ meal })}
+              onArchive={archiveMeal}
+              onRestore={restoreMeal}
+              onDelete={setConfirmDelete}
             />
           )}
 
@@ -454,7 +474,11 @@ export default function App() {
             meal={editor.meal}
             catalog={catalog}
             warning={editor.meal ? portionWarning(store.stats.get(editor.meal.id)) : null}
+            used={!!editor.meal && store.usedMealIds.has(editor.meal.id)}
             onCancel={() => setEditor(null)}
+            onArchive={archiveMeal}
+            onRestore={restoreMeal}
+            onDelete={setConfirmDelete}
             onSave={(meal) => {
               const isNew = !editor.meal
               store.saveMeal({ ...meal, id: meal.id || newId() })
@@ -463,6 +487,38 @@ export default function App() {
               say(isNew ? `${meal.name} is in the larder.` : `${meal.name} updated.`)
             }}
           />
+        )}
+
+        {/* Above the editor's z-[12], since deleting can be started from inside it. */}
+        {confirmDelete && (
+          <div className="absolute inset-0 z-[14]">
+          <BottomSheet
+            kicker="Meals"
+            title={`Delete ${confirmDelete.name}?`}
+            note="No week has ever used it, so nothing’s lost — but this one doesn’t come back."
+            onClose={() => setConfirmDelete(null)}
+          >
+            <div className="mt-4 flex flex-col gap-[7px]">
+              <SheetRow
+                onClick={() => {
+                  store.deleteMeal(confirmDelete.id)
+                  setConfirmDelete(null)
+                  setEditor(null)
+                  say(`${confirmDelete.name} is gone.`)
+                }}
+                className="flex items-center gap-3 text-accent-700"
+              >
+                <span className="text-[15px]">🗑️</span> Yes, delete it
+              </SheetRow>
+              <SheetRow
+                onClick={() => setConfirmDelete(null)}
+                className="flex items-center gap-3"
+              >
+                <span className="text-[15px]">↩️</span> Keep it after all
+              </SheetRow>
+            </div>
+          </BottomSheet>
+          </div>
         )}
 
         {toast && <Toast message={toast} />}
