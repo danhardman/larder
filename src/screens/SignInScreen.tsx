@@ -1,18 +1,8 @@
 import { useAuth } from '../state/auth'
 import { missingConfig } from '../lib/firebase'
 
-/** Standalone = launched from the home screen. Per §7.3 that is the case the M0
- *  spike exists to test — mobile Safari alone won't reproduce the failure. */
-function displayMode() {
-  if (typeof window === 'undefined') return 'unknown'
-  const iosStandalone = (window.navigator as { standalone?: boolean }).standalone
-  if (iosStandalone || window.matchMedia('(display-mode: standalone)').matches) return 'standalone'
-  return 'browser tab'
-}
-
 export function SignInScreen() {
-  const { error, signInWithGoogle, signInWithGoogleRedirect } = useAuth()
-  const mode = displayMode()
+  const { error, signInWithGoogle } = useAuth()
 
   return (
     <div className="flex h-dvh justify-center overflow-hidden bg-neutral-300">
@@ -46,30 +36,12 @@ export function SignInScreen() {
 
           {error && (
             <div className="rounded-md border border-divider bg-neutral-100 px-4 py-3">
-              <p className="text-[13px] font-bold text-accent-800">
-                {error.from === 'popup' ? 'Popup sign-in failed' : 'Redirect sign-in failed'} —{' '}
-                {error.code}
-              </p>
+              <p className="text-[13px] font-bold text-accent-800">Sign-in failed — {error.code}</p>
               <p className="mt-1 text-[12.5px] leading-[1.5] break-words text-neutral-700">
                 {error.message}
               </p>
-              <button
-                type="button"
-                onClick={signInWithGoogleRedirect}
-                className="mt-3 cursor-pointer rounded-sm border border-neutral-400 bg-transparent px-3 py-2 text-[13px] font-bold text-neutral-800"
-              >
-                Try redirect instead
-              </button>
             </div>
           )}
-
-          {/* M0 spike readout — delete this block with the rest of the spike. */}
-          <p className="text-[12px] leading-[1.6] text-neutral-600">
-            Spike diagnostics · running in <strong>{mode}</strong> · origin{' '}
-            <strong className="break-all">{window.location.origin}</strong>
-            <br />
-            The popup path is only properly tested from the home-screen-installed app.
-          </p>
         </div>
       </div>
     </div>

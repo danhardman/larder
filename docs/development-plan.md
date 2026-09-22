@@ -38,7 +38,7 @@ ingredient catalog, no Settings screen, no insights view, plus dead stubs (`effo
 
 ---
 
-## Stage 0 — M0 auth spike ⚠️
+## Stage 0 — M0 auth spike ✅ done
 
 Spec §7.3, §8. **This gates everything else.** The risk: Google `signInWithPopup` from an *installed iOS
 home-screen PWA* on a non-Firebase origin has historically failed — the popup returns its result via web
@@ -62,9 +62,9 @@ spike exercises the real flow:
   export so an unset Cloudflare variable shows up as a message rather than a blank screen.
 - `src/state/auth.tsx` — `AuthProvider` / `useAuth`. `signInWithPopup` is called **directly in the click
   handler with no preceding `await`** (Safari's popup blocker kills it otherwise).
-- `src/screens/SignInScreen.tsx` — the Google button, the failure readout (error code + message), a
-  **Try redirect instead** button that appears on failure, and a diagnostics line showing whether the app
-  is running standalone or in a browser tab.
+- `src/screens/SignInScreen.tsx` — the Google button and the failure readout (error code + message).
+  The **Try redirect instead** button and the standalone/browser diagnostics line were spike-only and
+  have been removed.
 - `src/components/AuthGate.tsx` — renders the sign-in screen until there's a user. It also adds a
   spike-only account pill (top right) with **Sign out**, since there's no Settings screen until Stage 5
   and without it you can't re-test sign-in on the phone.
@@ -76,12 +76,31 @@ No household check yet — any Google account gets in. Stage 3 adds membership.
 variables (`cloudflare-pages-setup.md`). Vite inlines them at build time, so the currently deployed build
 has to be rebuilt after they're set.
 
-**Review checkpoint:** you tell me whether sign-in worked from the installed PWA.
+### Outcome — popup works, no proxy needed
 
-- **Worked** → Stage 3 uses `signInWithPopup`. Delete the spike page.
-- **Failed** → Stage 3 also needs a Pages Function forwarding `/__/auth/*` to
-  `<project>.firebaseapp.com/__/auth/*` (a transparent proxy, **not** a 302), and switches to
-  `signInWithRedirect`.
+Tested from the installed home-screen PWA on the real phone: **`signInWithPopup` works.** The
+years-old storage-partitioning failure did not reproduce. So:
+
+- **Stage 3 uses `signInWithPopup`.** The Cloudflare Pages Function proxying `/__/auth/*` is *not*
+  needed and should not be built.
+- The redirect fallback (`signInWithGoogleRedirect`, `getRedirectResult`) has been removed along with
+  the rest of the spike scaffolding — it only ever existed to answer this question, and on a
+  non-Firebase origin it is the path storage partitioning actually breaks. `git log` has it if a
+  device ever proves otherwise.
+
+Two configuration traps surfaced while testing, both now written up in `firebase-setup.md`:
+
+- The API key's HTTP-referrer allowlist must include **`https://<project>.firebaseapp.com/*`** — the
+  origin serving `/__/auth/handler`. Without it the popup dies on Google's generic *"The requested
+  action is invalid."* screen with nothing in the app's own console. This is separate from, and not
+  covered by, Authorized domains. (`firebase-setup.md` §6)
+- `public/_headers` now sets `Cross-Origin-Opener-Policy: same-origin-allow-popups` so a dismissed
+  popup surfaces as `auth/popup-closed-by-user` instead of a promise that never settles. Chrome still
+  logs a COOP warning during sign-in — that comes from Google's accounts page, and is noise.
+
+**Still carried forward:** the account pill in `src/components/AuthGate.tsx` stays until Stage 5 gives
+it a real Settings screen, and there is still no household check — any Google account gets in until
+Stage 3 adds membership.
 
 ---
 
@@ -140,9 +159,12 @@ shopping list still renders and ticks.
 
 ## Stage 3 — Auth gate, household membership, sharing (M2)
 
-Shape depends on Stage 0's answer.
+Stage 0 settled the shape: **`signInWithPopup`, no `/__/auth/*` proxy.** The sign-in screen, the
+`AuthProvider` and the gate already exist and work — this stage adds the household layer on top rather
+than building auth from scratch.
 
-- Sign-in screen; app gated behind an authed user with a household.
+- ~~Sign-in screen; app gated behind an authed user~~ (done in Stage 0) — extend the gate to also
+  require a household.
 - Invite/join a second member.
 - Plan history already feeds the recency rules (`recentDinnerIds`), so nothing new is needed there.
 
