@@ -172,7 +172,7 @@ export function SlotSheet({ target, plan, meals, actions, onChangeMode, onClose 
             placeholder="Freezer raid, out late…"
             maxLength={80}
             autoFocus
-            className="input text-[16px]"
+            className="input"
           />
           <SheetRow onClick={() => skip(skipNote)} className="rounded-[14px]">
             Save

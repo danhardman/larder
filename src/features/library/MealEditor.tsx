@@ -158,7 +158,7 @@ export function MealEditor({
           </label>
           <input
             id="meal-name"
-            className="input text-[16px]"
+            className="input"
             placeholder="Sausage pasta bake"
             value={name}
             onChange={(e) => {

@@ -109,8 +109,21 @@ button {
 }
 
 input,
-select {
+select,
+textarea {
   font-family: inherit;
+}
+
+/* iOS Safari zooms (and then lets the page scroll sideways) whenever a focused
+   control's text is under 16px. Keep the smaller design size on pointer
+   devices, bump every control to 16px on touch. Unlayered on purpose so it
+   beats Tailwind's layered `text-[14px]`-style utilities. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 :focus {
