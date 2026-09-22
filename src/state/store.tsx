@@ -12,6 +12,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { deleteDoc, deleteField, FieldPath, onSnapshot, setDoc, updateDoc } from 'firebase/firestore'
+import { ErrorScreen } from '../components/ErrorScreen'
 import { LoadingScreen } from '../components/LoadingScreen'
 import { fromISODate } from '../lib/dates'
 import { seasonForWeek } from '../lib/seasons'
@@ -20,9 +21,8 @@ import { newId } from '../lib/ids'
 import { randomSeed } from '../lib/rng'
 import { mealsInUse, statsByMeal, type MealStats } from '../lib/stats'
 import { DEFAULT_SETTINGS, type Household, type Meal, type Settings, type Slot, type WeekPlan } from '../types'
-import { useAuth } from './auth'
+import { useMemberHouseholdId } from './household'
 import {
-  findOrCreateHousehold,
   householdRef,
   mealRef,
   mealsCol,
@@ -34,6 +34,8 @@ import {
 } from './db'
 
 export interface LarderStore {
+  /** The household itself — name and members. Settings are also on `settings`. */
+  household: Household
   meals: Meal[]
   /** Keyed by weekStart ISO date. */
   plans: Record<string, WeekPlan>
@@ -69,10 +71,9 @@ const describe = (err: unknown): string => {
 }
 
 export function LarderProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
-  const uid = user?.uid ?? null
+  // Resolved by `HouseholdProvider`; the gate above guarantees membership here.
+  const hid = useMemberHouseholdId()
 
-  const [hid, setHid] = useState<string | null>(null)
   const [household, setHousehold] = useState<Household | null>(null)
   const [meals, setMeals] = useState<Meal[] | null>(null)
   const [plans, setPlans] = useState<Record<string, WeekPlan> | null>(null)
@@ -80,27 +81,9 @@ export function LarderProvider({ children }: { children: ReactNode }) {
 
   const fail = useCallback((err: unknown) => setError(describe(err)), [])
 
-  // Resolve the household once per signed-in user.
-  useEffect(() => {
-    if (!uid) return
-    let cancelled = false
-    setHid(null)
-    findOrCreateHousehold(uid)
-      .then((id) => {
-        if (!cancelled) setHid(id)
-      })
-      .catch((err) => {
-        if (!cancelled) fail(err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [uid, fail])
-
   // Three live subscriptions. `ready` below waits for the first delivery of each,
   // so no screen ever renders a half-loaded household as if it were empty.
   useEffect(() => {
-    if (!hid) return
     setHousehold(null)
     setMeals(null)
     setPlans(null)
@@ -131,7 +114,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
     return () => stop.forEach((unsubscribe) => unsubscribe())
   }, [hid, fail])
 
-  const ready = hid !== null && household !== null && meals !== null && plans !== null
+  const ready = household !== null && meals !== null && plans !== null
 
   const settings = household?.settings ?? DEFAULT_SETTINGS
   const plansList = useMemo(() => Object.values(plans ?? {}), [plans])
@@ -146,7 +129,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
 
   const draftWeek = useCallback(
     async (weekStart: string) => {
-      if (!hid || !meals) return
+      if (!meals) return
       const seed = randomSeed()
       const existing = plans?.[weekStart]
       const result = generatePlan({
@@ -175,7 +158,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
 
   const patchPlan = useCallback(
     (weekStart: string, changes: Partial<WeekPlan>) => {
-      if (!hid || !plans?.[weekStart]) return
+      if (!plans?.[weekStart]) return
       updateDoc(weekPlanRef(hid, weekStart), changes).catch(fail)
     },
     [hid, plans, fail],
@@ -204,7 +187,6 @@ export function LarderProvider({ children }: { children: ReactNode }) {
 
   const saveMeal = useCallback(
     (meal: Meal) => {
-      if (!hid) return
       setDoc(mealRef(hid, meal.id), meal).catch(fail)
     },
     [hid, fail],
@@ -212,7 +194,6 @@ export function LarderProvider({ children }: { children: ReactNode }) {
 
   const setMealArchived = useCallback(
     (mealId: string, archived: boolean) => {
-      if (!hid) return
       updateDoc(mealRef(hid, mealId), { archived }).catch(fail)
     },
     [hid, fail],
@@ -225,7 +206,6 @@ export function LarderProvider({ children }: { children: ReactNode }) {
    */
   const deleteMeal = useCallback(
     (mealId: string) => {
-      if (!hid) return
       deleteDoc(mealRef(hid, mealId)).catch(fail)
     },
     [hid, fail],
@@ -234,7 +214,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
   const toggleTick = useCallback(
     (weekStart: string, key: string) => {
       const plan = plans?.[weekStart]
-      if (!hid || !plan) return
+      if (!plan) return
       // A FieldPath rather than a dotted string: ingredient names can contain `.`.
       const on = !plan.ticked[key]
       updateDoc(weekPlanRef(hid, weekStart), new FieldPath('ticked', key), on ? true : deleteField()).catch(fail)
@@ -244,30 +224,17 @@ export function LarderProvider({ children }: { children: ReactNode }) {
 
   const updateSettings = useCallback(
     (changes: Partial<Settings>) => {
-      if (!hid) return
       updateDoc(householdRef(hid), { settings: { ...settings, ...changes } }).catch(fail)
     },
     [hid, settings, fail],
   )
 
-  if (error) {
-    return (
-      <div className="flex h-dvh items-center justify-center bg-bg px-6">
-        <div className="max-w-[430px] rounded-md border border-accent-400 bg-accent-100 px-4 py-3 text-[13px] leading-[1.5] text-accent-800">
-          <p className="font-bold">Couldn’t reach the larder.</p>
-          <p className="mt-1 break-words">{error}</p>
-          <p className="mt-2 text-neutral-700">
-            A permission error here usually means the Firestore rules haven’t been deployed for this
-            project yet.
-          </p>
-        </div>
-      </div>
-    )
-  }
+  if (error) return <ErrorScreen message={error} />
 
   if (!ready) return <LoadingScreen />
 
   const value: LarderStore = {
+    household,
     meals,
     plans,
     plansList,

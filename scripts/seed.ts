@@ -1,25 +1,38 @@
 /**
- * Seed the local Firestore emulator with the starter meal library.
+ * Seed the local emulators so a fresh sign-in can get going.
  *
  *   pnpm emulators        # in one terminal
- *   (sign in to the app once, so a household exists)
- *   pnpm seed             # in another
+ *   (sign in to the app once, so an auth account exists — it lands on "invite only")
+ *   pnpm seed             # in another; then reload the app
  *
- * Writes `SEED_MEALS` into every household that has no meals yet. Uses the Admin
- * SDK, which bypasses the security rules — fine against the emulator, and the
- * reason this script refuses to run against anything else.
+ * Two jobs, both idempotent:
+ *   1. Every Auth-emulator account becomes a founder (`/founders/{email}`), since the
+ *      rules only let founders create a household. Production has exactly one
+ *      founder, written by hand in the console — see docs/firebase-setup.md §9.
+ *   2. Every household with no meals yet gets `SEED_MEALS`. A founder with no
+ *      household gets one first, so a single run of this script is enough.
+ *
+ * Uses the Admin SDK, which bypasses the security rules — fine against the
+ * emulator, and the reason this script refuses to run against anything else.
  */
 
 import { initializeApp } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { SEED_MEALS } from '../src/data/seedLibrary'
 
-const EMULATOR = '127.0.0.1:8080'
+const FIRESTORE_EMULATOR = '127.0.0.1:8080'
+const AUTH_EMULATOR = '127.0.0.1:9099'
 
-// Set before the SDK initialises; with this set the Admin SDK needs no credentials.
-process.env.FIRESTORE_EMULATOR_HOST ??= EMULATOR
-if (process.env.FIRESTORE_EMULATOR_HOST !== EMULATOR) {
-  console.error(`Refusing to seed: FIRESTORE_EMULATOR_HOST is ${process.env.FIRESTORE_EMULATOR_HOST}, expected ${EMULATOR}.`)
+// Set before the SDK initialises; with these set the Admin SDK needs no credentials.
+process.env.FIRESTORE_EMULATOR_HOST ??= FIRESTORE_EMULATOR
+process.env.FIREBASE_AUTH_EMULATOR_HOST ??= AUTH_EMULATOR
+if (process.env.FIRESTORE_EMULATOR_HOST !== FIRESTORE_EMULATOR) {
+  console.error(`Refusing to seed: FIRESTORE_EMULATOR_HOST is ${process.env.FIRESTORE_EMULATOR_HOST}, expected ${FIRESTORE_EMULATOR}.`)
+  process.exit(1)
+}
+if (process.env.FIREBASE_AUTH_EMULATOR_HOST !== AUTH_EMULATOR) {
+  console.error(`Refusing to seed: FIREBASE_AUTH_EMULATOR_HOST is ${process.env.FIREBASE_AUTH_EMULATOR_HOST}, expected ${AUTH_EMULATOR}.`)
   process.exit(1)
 }
 
@@ -28,12 +41,33 @@ initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'larder-67041' })
 const db = getFirestore()
 
 async function main() {
-  const households = await db.collection('households').get()
-  if (households.empty) {
-    console.log('No households in the emulator yet — sign in to the app once first, then re-run.')
+  const { users } = await getAuth().listUsers(1000)
+  if (users.length === 0) {
+    console.log('No accounts in the auth emulator yet — sign in to the app once first, then re-run.')
     return
   }
 
+  for (const user of users) {
+    if (!user.email) continue
+    const email = user.email.trim().toLowerCase()
+    await db.doc(`founders/${email}`).set({ seededAt: FieldValue.serverTimestamp() }, { merge: true })
+    console.log(`${email}: founder.`)
+
+    const memberOf = await db.collection('households').where('memberUids', 'array-contains', user.uid).limit(1).get()
+    if (memberOf.empty) {
+      // Same shape as `createHousehold` in src/state/db.ts.
+      const ref = await db.collection('households').add({
+        name: 'Our larder',
+        memberUids: [user.uid],
+        members: { [user.uid]: { name: user.displayName || email, email } },
+        settings: { recencyWindowWeeks: 2, rotationSize: 2 },
+        createdAt: FieldValue.serverTimestamp(),
+      })
+      console.log(`${email}: created household ${ref.id}.`)
+    }
+  }
+
+  const households = await db.collection('households').get()
   for (const household of households.docs) {
     const meals = household.ref.collection('meals')
     const existing = await meals.limit(1).get()

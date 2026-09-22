@@ -21,6 +21,7 @@ built against a subset of the spec. The app runs, 28 tests pass, `tsc -b` is cle
 | Meal CRUD | `src/features/library/` (`MealEditor.tsx`, `useLibrary.ts`) | Create/edit/archive/restore/delete, delete guarded by `usedMealIds` |
 | Setup docs | `docs/firebase-setup.md`, `docs/cloudflare-pages-setup.md` | Already written and accurate — the stages below point at them rather than repeating them |
 | Firestore store | `src/state/store.tsx`, `src/state/db.ts`, `firestore.rules` | Stage 2 — household-scoped, offline-first, rules tested |
+| Membership | `src/state/household.tsx`, `src/features/auth/`, `src/features/settings/` | Stage 3 — founders gate, invite by email, join, members list |
 
 **The gaps:** no Firebase at all (SDK installed, never imported), no household scoping, no auth, no real
 ingredient catalog, no Settings screen, no insights view, plus dead stubs (`effort`, the
@@ -103,9 +104,9 @@ Two configuration traps surfaced while testing, both now written up in `firebase
   popup surfaces as `auth/popup-closed-by-user` instead of a promise that never settles. Chrome still
   logs a COOP warning during sign-in — that comes from Google's accounts page, and is noise.
 
-**Still carried forward:** the account pill in `src/features/auth/AuthGate.tsx` stays until Stage 5 gives
-it a real Settings screen. Since Stage 2, a Google account that gets in lands in its own household;
-Stage 3 adds joining someone else's.
+**Since superseded:** the spike-only account pill went when Stage 3 brought the Settings tab forward,
+and a Google account no longer gets its own household just for signing in — Stage 3 gated founding
+behind the founders allowlist and added joining someone else's.
 
 ---
 
@@ -219,7 +220,7 @@ then the phone check (sign in, see an empty household, draft a week, go offline,
 
 ---
 
-## Stage 3 — Auth gate, household membership, sharing (M2)
+## Stage 3 — Auth gate, household membership, sharing (M2) ✅ done
 
 Stage 0 settled the shape: **`signInWithPopup`, no `/__/auth/*` proxy.** The sign-in screen, the
 `AuthProvider` and the gate already exist and work — this stage adds the household layer on top rather
@@ -236,6 +237,47 @@ the `create`/`update` rules currently allow a household of exactly one, and will
 accept an invite.
 
 **Your manual work:** sign in on both phones, confirm you see the same data.
+
+### Outcome
+
+Built with one addition to the brief: the app is **closed for beta**. Only a founder can create a
+household, and the only other way in is an invite from a member — a random Google account that finds
+the URL signs in and lands on an *invite only* screen.
+
+- **Invite by email, verified by the rules.** A member writes `/invites/{email}` (lower-cased, one per
+  address) naming their household. When that Google account signs in, the client reads its own invite
+  and shows a Join screen; the join is one batch — append own uid to `memberUids`, add own
+  `members.{uid}` profile, delete the invite — and the rules accept it because
+  `request.auth.token.email` matches the invite and the invite names that household. No backend, no
+  claim, no code to share. `firestore.rules` has the full model in comments.
+- **Founder gate.** `create` on a household requires `/founders/{email}` to exist. That collection is
+  closed to clients (rules only see it through `exists()`), so the one production doc is written by
+  hand in the console — `docs/firebase-setup.md` §9. Lifting the gate later is deleting `isFounder()`
+  from one rule. Locally `pnpm seed` makes every auth-emulator account a founder and gives it a
+  household, so the emulator flow is: sign in → locked out → `pnpm seed` → reload.
+- **`members` map** on the household doc (`{uid: {name, email}}`), written by each member for
+  themselves only, so the members list has names. Stage 2 households lack it; the mapper defaults it
+  and the rules use `get('members', {})`, so nothing needs migrating.
+- **`HouseholdProvider` / `useHousehold()`** (`src/state/household.tsx`) sits between the auth gate and
+  the store: `resolving → member | invited | not-invited | error`. The invite listener stays live on
+  the locked-out screen, so an invite flips it to Join without a reload. Founding is attempted once per
+  sign-in; `permission-denied` there *is* the "not a founder" signal. `HouseholdGate`
+  (`src/features/auth/`) renders the Join / locked-out / error screens. The store now takes `hid` from
+  the provider and exposes `household` on `useLarder()` — the one interface change.
+- **Settings tab pulled forward** from Stage 5 (`src/features/settings/`): members, invite-by-email
+  with revoke, account + sign out. The spike-only account pill is gone. Stage 5 now only adds the
+  recency/rotation controls to this screen.
+- **Rules tests** — 31 cases: founding (only founders, only a household of exactly themselves), member
+  edits (name/settings/own profile only; `memberUids` untouchable), invites (well-formed, member-only
+  create, invitee-only get, member-only filtered list, no update, revoke by member or invitee), joining
+  (the batch; every wrong shape rejected; unverified email rejected; Stage 2 doc without `members`
+  accepted), founders closed. One thing learnt: `arrayUnion` of a uid already present is a no-op and
+  passes as an empty edit — harmless, and the test says so.
+- **Not built:** removing a member (nothing in v1 needs it; edit `memberUids` in the console).
+
+**Still to do by hand:** `firebase deploy --only firestore:rules`, create the `founders/<your email>`
+doc, deploy to Cloudflare, sign in on your phone, invite the second phone's Google account from
+Settings, have them install and sign in → Join.
 
 ---
 
@@ -260,13 +302,13 @@ one summed line.
 
 ---
 
-## Stage 5 — Settings screen
+## Stage 5 — Settings controls
 
 Spec §6. `recencyWindowWeeks` and `rotationSize` are already plumbed end-to-end into the generator, and
 `updateSettings` exists in `src/state/store.tsx` but **is never called by anything**. Mostly a form.
 
-- Fourth tab in `src/components/TabBar.tsx` (currently three: weeks / library / shop).
-- Recency window + rotation size controls, household members list, sign-out.
+- ~~Fourth tab, household members list, sign-out~~ — done in Stage 3 (`src/features/settings/`).
+- Recency window + rotation size controls on that screen, above the members section.
 
 **Review:** set rotation size to 1, regenerate a week, confirm breakfasts stop varying.
 
@@ -336,7 +378,7 @@ Lowest-value items, batched last so you can stop before them without losing anyt
 ## Dependency order
 
 ```
-Stage 0 (spike) ─┬─> Stage 2 (Firestore) ──> Stage 3 (auth) ──> Stage 5 (settings) ──┐
+Stage 0 (spike) ─┬─> Stage 2 (Firestore) ──> Stage 3 (auth) ✅ ─> Stage 5 (settings) ─┐
                  │                       └──> Stage 4 (ingredients) ─────────────────┤
 Stage 1 (fixes) ─┘                                                                   ├──> Stage 8
                                             Stage 6 (insights) ─────────────────────┤

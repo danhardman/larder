@@ -14,7 +14,7 @@ is `docs/development-plan.md`. Firebase and Cloudflare setup are in `docs/`.
 pnpm install
 pnpm emulators      # Firebase auth + Firestore emulators (needs Java); data persists in .emulator/
 pnpm dev            # Vite dev server — in dev it talks to the emulators, never production
-pnpm seed           # write the starter meal library into the emulator (sign in to the app once first)
+pnpm seed           # make emulator accounts founders + write the starter library (sign in once first)
 pnpm vitest run     # tests, one shot (`pnpm test` watches)
 pnpm test:rules     # Firestore security rules test; needs the emulators running
 pnpm typecheck      # tsc -b --noEmit
@@ -23,20 +23,23 @@ pnpm build          # tsc -b && vite build
 ```
 
 Sign-in needs the `VITE_FIREBASE_*` variables in `.env.local` (see `docs/firebase-setup.md`). In the
-auth emulator, "Sign in with Google" offers to make up a fake account — any will do.
+auth emulator, "Sign in with Google" offers to make up a fake account — any will do. The app is
+invite-only: a fresh account lands on a locked screen until `pnpm seed` makes it a founder (locally) or
+a member invites it from Settings.
 
 ## Where things live
 
 ```
 src/
-  main.tsx          Providers (auth → gate → store → toast) around <App/>.
+  main.tsx          Providers (auth → gate → household → gate → store → toast) around <App/>.
   App.tsx           The shell: which tab is showing, which overlay is open, and the
                     hand-offs between features. Composition only — no business logic.
   types/            The persisted domain model, and nothing else.
     meal.ts         Meal, MealIngredient and the classification enums + their lists.
     plan.ts         WeekPlan, Slot, outcomes, skip reasons, portion feedback + labels.
     settings.ts     Household settings and their defaults.
-    household.ts    The household document everything lives under (name, memberUids, settings).
+    household.ts    The household document everything lives under (name, memberUids, members,
+                    settings) and the Invite document.
   lib/              Pure functions with no React and no IO: the plan generator, the
                     shopping list, stats, seasons, seeded randomness, date helpers. Tests sit
                     beside the modules. Anything that touches a screen, the network or
@@ -45,8 +48,11 @@ src/
   state/            React context providers and their hooks.
     store.tsx       useLarder(): all household data plus the actions that change it,
                     subscribed live to Firestore.
-    db.ts           Firestore paths, snapshot → domain mappers, find-or-create household.
+    db.ts           Firestore paths, snapshot → domain mappers, and the membership writes
+                    (find / found / join a household, invites).
     auth.tsx        useAuth(): Firebase sign-in state.
+    household.tsx   useHousehold(): which household the user is in, or whether they're
+                    invited, locked out, or founding one.
     toast.tsx       useToast(): say('...') shows a transient message.
     firebase.ts     Firebase SDK init: app, auth, Firestore with offline persistence,
                     emulator wiring in dev.
@@ -55,18 +61,21 @@ src/
                     + swipeGesture.ts); the rest are single files.
   features/         One folder per area of the app. Each owns its screen, its hooks,
     auth/           and its sub-components; nothing imports across features except
-    weeks/          App.tsx.
-    library/
+    weeks/          App.tsx. auth/ holds the sign-in, join and locked-out screens
+    library/        and the two gates; settings/ the members list and invites.
     shopping/
-scripts/seed.ts     Writes the seed library into the emulator (Admin SDK; refuses to run elsewhere).
+    settings/
+scripts/seed.ts     Makes emulator accounts founders and writes the seed library (Admin SDK; refuses
+                    to run elsewhere).
 test/rules.test.ts  Security rules test against the emulator.
-firestore.rules     The authorization layer: members of a household, and nobody else.
+firestore.rules     The authorization layer: members of a household, invitees joining, founders
+                    founding, and nobody else.
 ```
 
 ## How data flows
 
-`useLarder()` is the single source of truth. It exposes the data (`meals`, `plans`, `ticked`,
-`settings`), derived views (`stats`, `usedMealIds`) and the actions (`draftWeek`, `patchSlot`,
+`useLarder()` is the single source of truth. It exposes the data (`household`, `meals`, `plans`,
+`ticked`, `settings`), derived views (`stats`, `usedMealIds`) and the actions (`draftWeek`, `patchSlot`,
 `saveMeal`, ...). It is backed by Firestore under `/households/{hid}` with offline persistence on:
 three live subscriptions (the household doc, `meals`, `weekPlans`) feed the data, and actions write
 straight to documents without awaiting the server — offline, the local snapshot updates at once and

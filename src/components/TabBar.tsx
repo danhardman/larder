@@ -1,11 +1,12 @@
-import { BasketIcon, BookIcon, CalendarIcon } from './icons'
+import { BasketIcon, BookIcon, CalendarIcon, CogIcon } from './icons'
 
-export type Screen = 'weeks' | 'library' | 'shop'
+export type Screen = 'weeks' | 'library' | 'shop' | 'settings'
 
 const TABS: { id: Screen; label: string; Icon: typeof CalendarIcon }[] = [
   { id: 'weeks', label: 'Weeks', Icon: CalendarIcon },
   { id: 'library', label: 'Library', Icon: BookIcon },
   { id: 'shop', label: 'Shopping', Icon: BasketIcon },
+  { id: 'settings', label: 'Settings', Icon: CogIcon },
 ]
 
 interface TabBarProps {
@@ -16,7 +17,7 @@ interface TabBarProps {
 
 export function TabBar({ screen, dots, onPick }: TabBarProps) {
   return (
-    <nav className="absolute right-0 bottom-0 left-0 z-[8] grid grid-cols-3 gap-1 border-t border-divider bg-neutral-100 px-[10px] pt-2 pb-[calc(10px+env(safe-area-inset-bottom))]">
+    <nav className="absolute right-0 bottom-0 left-0 z-[8] grid grid-cols-4 gap-1 border-t border-divider bg-neutral-100 px-[10px] pt-2 pb-[calc(10px+env(safe-area-inset-bottom))]">
       {TABS.map(({ id, label, Icon }) => {
         const active = screen === id
         return (

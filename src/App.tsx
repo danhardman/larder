@@ -6,6 +6,8 @@ import { DeleteMealSheet } from './features/library/DeleteMealSheet'
 import { LibraryScreen } from './features/library/LibraryScreen'
 import { MealEditor } from './features/library/MealEditor'
 import { useLibrary } from './features/library/useLibrary'
+import { SettingsScreen } from './features/settings/SettingsScreen'
+import { useInvites } from './features/settings/useInvites'
 import { ShoppingScreen } from './features/shopping/ShoppingScreen'
 import { useShopping } from './features/shopping/useShopping'
 import { DraftActionBar } from './features/weeks/DraftActionBar'
@@ -13,6 +15,7 @@ import { SlotSheet, type SheetTarget } from './features/weeks/SlotSheet'
 import { useSlotActions } from './features/weeks/useSlotActions'
 import { useWeeks } from './features/weeks/useWeeks'
 import { WeeksScreen } from './features/weeks/WeeksScreen'
+import { useAuth } from './state/auth'
 import { useLarder } from './state/store'
 import { useToast } from './state/toast'
 
@@ -26,6 +29,7 @@ const NEXT_WEEK = 2
  */
 export default function App() {
   const store = useLarder()
+  const { user, signOutOfLarder } = useAuth()
   const { message: toast } = useToast()
 
   const [screen, setScreen] = useState<Screen>('weeks')
@@ -35,6 +39,7 @@ export default function App() {
   const slots = useSlotActions({ onAccepted: () => setScreen('shop') })
   const shopping = useShopping(weeks.weeks)
   const library = useLibrary({ onSaved: () => setScreen('library') })
+  const invites = useInvites()
 
   const goTo = (next: Screen) => {
     setScreen(next)
@@ -100,6 +105,19 @@ export default function App() {
               onArchive={library.archiveMeal}
               onRestore={library.restoreMeal}
               onDelete={library.requestDelete}
+            />
+          )}
+
+          {screen === 'settings' && (
+            <SettingsScreen
+              household={store.household}
+              invites={invites.invites}
+              currentUid={user?.uid ?? ''}
+              accountName={user?.displayName || user?.email || 'Signed in'}
+              accountEmail={user?.email ?? ''}
+              onInvite={invites.inviteMember}
+              onRevoke={invites.revokeInvite}
+              onSignOut={signOutOfLarder}
             />
           )}
 
