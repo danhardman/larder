@@ -55,10 +55,26 @@ or needs a Cloudflare Pages Function proxy.
 4. Deploy, **add to home screen on your actual phone**, tap sign in.
    Mobile Safari alone will not reproduce the failure — installed standalone mode is the failing case.
 
-**My work:** a throwaway spike page — one "Sign in with Google" button calling `signInWithPopup`
-**directly in the click handler with no preceding `await`** (Safari's popup blocker kills it otherwise),
-plus `public/_redirects` and `public/_headers` (`cloudflare-pages-setup.md` §3) and a `src/lib/firebase.ts`
-reading the `VITE_FIREBASE_*` env vars.
+**My work — done.** Rather than a separate throwaway page, the whole app is gated behind sign-in, so the
+spike exercises the real flow:
+
+- `src/lib/firebase.ts` — app + auth init from the `VITE_FIREBASE_*` env vars, plus a `missingConfig`
+  export so an unset Cloudflare variable shows up as a message rather than a blank screen.
+- `src/state/auth.tsx` — `AuthProvider` / `useAuth`. `signInWithPopup` is called **directly in the click
+  handler with no preceding `await`** (Safari's popup blocker kills it otherwise).
+- `src/screens/SignInScreen.tsx` — the Google button, the failure readout (error code + message), a
+  **Try redirect instead** button that appears on failure, and a diagnostics line showing whether the app
+  is running standalone or in a browser tab.
+- `src/components/AuthGate.tsx` — renders the sign-in screen until there's a user. It also adds a
+  spike-only account pill (top right) with **Sign out**, since there's no Settings screen until Stage 5
+  and without it you can't re-test sign-in on the phone.
+- `public/_redirects` and `public/_headers` (`cloudflare-pages-setup.md` §3).
+
+No household check yet — any Google account gets in. Stage 3 adds membership.
+
+**Before deploying:** set every `VITE_FIREBASE_*` value in Cloudflare Pages → Settings → Environment
+variables (`cloudflare-pages-setup.md`). Vite inlines them at build time, so the currently deployed build
+has to be rebuilt after they're set.
 
 **Review checkpoint:** you tell me whether sign-in worked from the installed PWA.
 
