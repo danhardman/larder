@@ -40,6 +40,18 @@ const bacon = meal('c', 'Bacon sandwich', [
 ])
 
 describe('buildShoppingList', () => {
+  it('buys nothing for a night we’re out', () => {
+    const away: Slot = { ...slot(1, 'b', 'Katsu curry'), mealId: null, mealName: '', away: 'at_friends' }
+    const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), away], [fajitas, katsu])
+    expect(lines.find((l) => l.name === 'chicken thighs')!.total).toBe(300)
+  })
+
+  it('buys nothing for an away slot that still carries a meal', () => {
+    const away: Slot = { ...slot(1, 'b', 'Katsu curry'), away: 'ate_out' }
+    const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), away], [fajitas, katsu])
+    expect(lines.find((l) => l.name === 'chicken thighs')!.total).toBe(300)
+  })
+
   it('sums matching ingredient + unit across meals', () => {
     const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), slot(1, 'b', 'Katsu curry')], [
       fajitas,

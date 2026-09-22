@@ -5,8 +5,15 @@ import { rerollSlot } from '../../lib/generatePlan'
 import { rngFrom } from '../../lib/rng'
 import { useLarder } from '../../state/store'
 import { useToast } from '../../state/toast'
-import { SKIP_REASONS, type Meal, type PortionFeedback, type SkipReason } from '../../types'
-import type { SlotRef } from './weekView'
+import {
+  AWAY_REASONS,
+  SKIP_REASONS,
+  type Meal,
+  type PortionFeedback,
+  type SkipReason,
+  type WeekPlan,
+} from '../../types'
+import { type SlotRef } from './weekView'
 
 export type SlotActions = ReturnType<typeof useSlotActions>
 
@@ -38,6 +45,42 @@ export function useSlotActions({ onAccepted }: { onAccepted: () => void }) {
     say(`Noted — ${label.toLowerCase()}.`)
   }
 
+  /**
+   * Planned away: we're out that day, so the slot keeps no meal and buys nothing.
+   * Unlike `markSkipped` this is a drafting decision, and works on a week that hasn't
+   * been drafted at all — the store writes a blank plan to hold it.
+   */
+  const markAway = (weekStart: string, index: number, reason: SkipReason, note?: string) => {
+    store.setSlotAway(weekStart, index, reason, note)
+    const label = AWAY_REASONS.find((r) => r.value === reason)?.label ?? 'Out'
+    say(`Noted — ${label.toLowerCase()}. Nothing bought for it.`)
+  }
+
+  /**
+   * Back in: clear the marking and, on a drafted week, fill the gap it leaves. Both
+   * halves go in one write — two patches in a tick would each be built from the same
+   * pre-update snapshot, and the second would put `away` straight back.
+   */
+  const clearAway = (weekStart: string, index: number) => {
+    const plan = store.planFor(weekStart)
+    if (!plan) return
+    // Nothing generated to leave a gap, or a week that's already shopped for: just
+    // lift the marking rather than quietly adding a meal nobody has bought for.
+    if (plan.status === 'pencilled' || plan.status === 'accepted') {
+      store.patchSlot(weekStart, index, { away: null, awayNote: null })
+      say('Back on the menu.')
+      return
+    }
+    const pick = pickFor(plan, index)
+    store.patchSlot(weekStart, index, {
+      away: null,
+      awayNote: null,
+      mealId: pick?.id ?? null,
+      mealName: pick?.name ?? '',
+    })
+    say(pick ? `${pick.name} it is.` : 'Back on the menu — nothing in the library fits, though.')
+  }
+
   const setPortion = (weekStart: string, index: number, value: PortionFeedback, label: string) => {
     store.patchSlot(weekStart, index, { portionFeedback: value })
     setPortionFor(null)
@@ -46,16 +89,20 @@ export function useSlotActions({ onAccepted }: { onAccepted: () => void }) {
 
   const dismissPortion = () => setPortionFor(null)
 
-  const reroll = (weekStart: string, index: number) => {
-    const plan = store.planFor(weekStart)
-    if (!plan) return
-    const pick = rerollSlot(
+  /** A fresh meal for one slot, with the rest of the week held fixed. */
+  const pickFor = (plan: WeekPlan, index: number) =>
+    rerollSlot(
       plan.slots,
       index,
       store.meals,
       seasonForWeek(fromISODate(plan.weekStart)),
       rngFrom(Date.now() >>> 0),
     )
+
+  const reroll = (weekStart: string, index: number) => {
+    const plan = store.planFor(weekStart)
+    if (!plan) return
+    const pick = pickFor(plan, index)
     if (!pick) {
       say('Library’s a bit thin there — add another one?')
       return
@@ -96,6 +143,8 @@ export function useSlotActions({ onAccepted }: { onAccepted: () => void }) {
     portionFor,
     markEaten,
     markSkipped,
+    markAway,
+    clearAway,
     setPortion,
     dismissPortion,
     reroll,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { generatePlan, eligible, isWeekendDay, rerollSlot, scoreDinner } from './generatePlan'
+import { blankSlots, generatePlan, eligible, isWeekendDay, rerollSlot, scoreDinner } from './generatePlan'
 import { rngFrom } from './rng'
 import { SEED_MEALS } from '../data/seedLibrary'
 import type { Effort, Meal, Slot, WeekPlan } from '../types'
@@ -70,6 +70,37 @@ describe('generatePlan', () => {
     expect(same?.locked).toBe(true)
   })
 
+  it('carries a night we’re out through untouched, and doesn’t spend a dinner on it', () => {
+    const first = generatePlan(base).slots
+    const fridayDinner = first.findIndex((s) => s.day === 4 && s.mealType === 'dinner')
+    const keep = first.map((s, i) =>
+      i === fridayDinner
+        ? { ...s, mealId: null, mealName: '', away: 'at_friends' as const, awayNote: null }
+        : s,
+    )
+
+    const { slots, thin } = generatePlan({ ...base, seed: 99, keep })
+    const friday = slots.find((s) => s.day === 4 && s.mealType === 'dinner')!
+    expect(friday.away).toBe('at_friends')
+    expect(friday.mealId).toBeNull()
+    // The empty slot is a choice, not a shortage.
+    expect(thin).not.toContain('dinners')
+    // Every other night still gets its own dinner.
+    const rest = dinners(slots).filter((s) => s.day !== 4)
+    expect(rest.every((s) => s.mealId)).toBe(true)
+    expect(new Set(rest.map((s) => s.mealId)).size).toBe(6)
+  })
+
+  it('resets last week’s outcome on a slot it carries through', () => {
+    const first = generatePlan(base).slots
+    const keep = first.map((s, i) =>
+      i === 2 ? { ...s, locked: true, outcome: 'eaten' as const, portionFeedback: 'too_much' as const } : s,
+    )
+    const again = generatePlan({ ...base, seed: 99, keep })
+    expect(again.slots[2].outcome).toBe('pending')
+    expect(again.slots[2].portionFeedback).toBeNull()
+  })
+
   it('reports a thin library rather than inventing meals', () => {
     const onlyDinner: Meal[] = [SEED_MEALS.find((m) => m.id === 'm6')!]
     const { slots, thin } = generatePlan({ ...base, library: onlyDinner })
@@ -80,6 +111,20 @@ describe('generatePlan', () => {
   it('excludes archived meals', () => {
     const library = SEED_MEALS.map((m) => (m.id === 'm6' ? { ...m, archived: true } : m))
     expect(eligible(library, 'dinner', 'summer').some((m) => m.id === 'm6')).toBe(false)
+  })
+})
+
+describe('blankSlots', () => {
+  it('is a full week of empty, un-named slots in the generator’s own order', () => {
+    const slots = blankSlots()
+    expect(slots).toHaveLength(21)
+    expect(slots.every((s) => s.mealId === null && s.mealName === '' && s.away === null)).toBe(true)
+    // The index of a slot is its identity everywhere — a marking written against a
+    // blank week has to land on the same slot once the week is generated.
+    const generated = generatePlan(base).slots
+    expect(slots.map((s) => `${s.day}${s.mealType}`)).toEqual(
+      generated.map((s) => `${s.day}${s.mealType}`),
+    )
   })
 })
 

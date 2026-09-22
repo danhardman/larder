@@ -1,8 +1,26 @@
-import { CalendarIcon, CheckIcon, LockIcon, ShuffleIcon } from '../../components/icons'
-import { addDays, DAY_NAMES, formatDay } from '../../lib/dates'
+import { useMemo } from 'react'
+import { CalendarIcon, CheckIcon, ShuffleIcon } from '../../components/icons'
+import { blankSlots } from '../../lib/generatePlan'
 import { seasonForWeek } from '../../lib/seasons'
-import { DayCard } from './DayCard'
-import { slotsForDay, TYPE_INITIAL, type WeekView } from './weekView'
+import { assertNever } from '../../lib/assertNever'
+import type { PlanStatus } from '../../types'
+import { PlannerDay } from './PlannerDay'
+import { slotsForDay, type WeekView } from './weekView'
+
+function plannerStep(status: PlanStatus): number {
+  switch (status) {
+    case 'pencilled':
+    case 'failed':
+      return 0
+    case 'draft':
+    case 'generating':
+      return 1
+    case 'accepted':
+      return 2
+    default:
+      return assertNever(status, 'plan status')
+  }
+}
 
 interface PlannerProps {
   week: WeekView
@@ -19,12 +37,11 @@ interface PlannerProps {
  */
 export function Planner({ week, onDraft, onReopen, onOpenSlot, onGoShop }: PlannerProps) {
   const plan = week.plan
-  const status = !plan ? 'empty' : plan.status
-  const stepIndex =
-    status === 'empty' || status === 'failed' ? 0 : status === 'draft' || status === 'generating' ? 1 : 2
+  const status: PlanStatus = plan?.status ?? 'pencilled'
+  const stepIndex = plannerStep(status)
   const steps = ['Generate', 'Review & tweak', 'Shopping list']
-  const showEmpty = !plan || plan.status === 'failed'
-  // Persisted on the plan (spec §3) so it survives a reload and shows on both phones.
+  const showEmpty = status === 'pencilled' || status === 'failed'
+  const slots = useMemo(() => plan?.slots ?? blankSlots(), [plan])
   const thinHint = plan?.thin.length
     ? `Your library’s a bit thin for ${seasonForWeek(week.start)} ${plan.thin[0]} — worth adding one or two.`
     : null
@@ -73,10 +90,14 @@ export function Planner({ week, onDraft, onReopen, onOpenSlot, onGoShop }: Plann
               {status === 'failed' ? 'Try again' : 'Draft the week'}
             </button>
           </div>
+          <div className="mt-[18px] text-[13px] leading-[1.5] text-neutral-700">
+            Out one night? Tap the slot and mark it first — it’ll stay empty, and nothing gets
+            bought for it.
+          </div>
         </div>
       )}
 
-      {!showEmpty && (
+      {plan && !showEmpty && (
         <div>
           {plan.status === 'accepted' && (
             <div className="mx-5 mt-4 rounded-md border-[1.5px] border-sage-300 bg-sage-100 px-4 py-[14px]">
@@ -108,7 +129,7 @@ export function Planner({ week, onDraft, onReopen, onOpenSlot, onGoShop }: Plann
 
           {plan.status === 'draft' && (
             <div className="mx-5 mt-4 text-[13px] leading-[1.5] text-neutral-700">
-              Tap any meal to roll it again, pick your own, or lock it. Locked slots survive a re-roll.
+              Tap any meal to roll it again, pick your own, lock it, or mark a night you’re out.
             </div>
           )}
 
@@ -117,47 +138,26 @@ export function Planner({ week, onDraft, onReopen, onOpenSlot, onGoShop }: Plann
               Drafting this week… it’ll fill in as soon as it’s ready.
             </div>
           )}
-
-          <div className="flex flex-col gap-[9px] px-5 pt-[14px]">
-            {Array.from({ length: 7 }, (_, d) => (
-              <DayCard key={d} name={DAY_NAMES[d]} date={formatDay(addDays(week.start, d))}>
-                <div className="grid grid-cols-3 gap-[7px]">
-                  {slotsForDay(plan, d).map(({ slot, index }) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => onOpenSlot(week.iso, index)}
-                      className={`flex min-h-[68px] cursor-pointer flex-col gap-1 rounded-xl border-[1.25px] p-2 text-left text-inherit hover:border-accent-400 ${
-                        slot.locked ? 'border-accent-400 bg-accent-100' : 'border-neutral-300 bg-bg'
-                      }`}
-                    >
-                      <span className="flex items-center justify-between gap-[3px]">
-                        <span
-                          className={`text-[9px] font-bold tracking-[0.08em] ${
-                            slot.locked ? 'text-accent-700' : 'text-neutral-500'
-                          }`}
-                        >
-                          {TYPE_INITIAL[slot.mealType]}
-                        </span>
-                        {slot.locked && <LockIcon size={11} className="flex-none text-accent-700" />}
-                      </span>
-                      <span className="text-[12px] leading-[1.2] font-semibold" style={{ textWrap: 'pretty' }}>
-                        {slot.mealName}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </DayCard>
-            ))}
-          </div>
-          {plan.status === 'draft' && thinHint && (
-            <div className="mx-5 mt-[14px] rounded-md border-[1.5px] border-dashed border-accent-300 bg-accent-100 px-[14px] py-3 text-[12.5px] leading-[1.45] text-accent-800">
-              {thinHint}
-            </div>
-          )}
-          <div className="h-24" />
         </div>
       )}
+
+      <div className="flex flex-col gap-[9px] px-5 pt-[14px]">
+        {Array.from({ length: 7 }, (_, d) => (
+          <PlannerDay
+            key={d}
+            weekStart={week.start}
+            day={d}
+            slots={slotsForDay(slots, d)}
+            onOpenSlot={(index) => onOpenSlot(week.iso, index)}
+          />
+        ))}
+      </div>
+      {status === 'draft' && thinHint && (
+        <div className="mx-5 mt-[14px] rounded-md border-[1.5px] border-dashed border-accent-300 bg-accent-100 px-[14px] py-3 text-[12.5px] leading-[1.45] text-accent-800">
+          {thinHint}
+        </div>
+      )}
+      <div className="h-24" />
     </div>
   )
 }

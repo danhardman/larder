@@ -32,7 +32,7 @@ describe('toPlan', () => {
     const plan = toPlan('2026-09-21', {})
     expect(plan.id).toBe('2026-09-21')
     expect(plan.weekStart).toBe('2026-09-21')
-    expect(plan.status).toBe('draft')
+    expect(plan.status).toBe('pencilled')
   })
 
   it('keeps persisted thin and ticked as written', () => {

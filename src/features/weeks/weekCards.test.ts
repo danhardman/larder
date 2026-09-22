@@ -18,6 +18,16 @@ function slot(outcome: Slot['outcome']): Slot {
   }
 }
 
+/** A slot on a week nobody has drafted yet. */
+function blank(): Slot {
+  return { ...slot('pending'), mealId: null, mealName: '' }
+}
+
+/** A night we're out: no meal, and a reason recorded up front. */
+function awaySlot(): Slot {
+  return { ...slot('pending'), mealId: null, mealName: '', away: 'at_friends' }
+}
+
 function plan(status: WeekPlan['status'], slots: Slot[]): WeekPlan {
   return { id: 'p', weekStart: '2026-09-21', slots, status, seed: 1, thin: [], generatedBy: 'client', ticked: {} }
 }
@@ -44,6 +54,24 @@ describe('buildWeekCards', () => {
     expect(card.meta).toBe('2 eaten · 1 skipped')
   })
 
+  it('treats a week with only nights-out pencilled in as still unplanned', () => {
+    const [card] = buildWeekCards([view(1, plan('pencilled', [awaySlot(), awaySlot(), blank()]))])
+    expect(card.chip).toBe('Not planned')
+    expect(card.meta).toBe('2 nights out · tap to plan')
+  })
+
+  it('counts nights we were out separately from skips', () => {
+    const [card] = buildWeekCards([
+      view(-1, plan('accepted', [slot('eaten'), slot('skipped'), awaySlot(), awaySlot()])),
+    ])
+    expect(card.meta).toBe('1 eaten · 1 skipped · 2 out')
+  })
+
+  it('leaves the out count off a week nobody was out for', () => {
+    const [card] = buildWeekCards([view(-1, plan('accepted', [slot('eaten')]))])
+    expect(card.meta).toBe('1 eaten · 0 skipped')
+  })
+
   it('flags a draft for review', () => {
     const [card] = buildWeekCards([view(1, plan('draft', [slot('pending')]))])
     expect(card.chip).toBe('Draft')
@@ -57,5 +85,11 @@ describe('buildWeekCards', () => {
     expect(thisWeek.meta).toBe('1 of 3 ticked')
     expect(nextWeek.chip).toBe('Locked in')
     expect(nextWeek.meta).toBe('List ready')
+  })
+
+  it('leaves an away night out of the tick progress — nobody has to tick it', () => {
+    const accepted = plan('accepted', [slot('eaten'), slot('pending'), awaySlot()])
+    const [thisWeek] = buildWeekCards([view(0, accepted)])
+    expect(thisWeek.meta).toBe('1 of 2 ticked')
   })
 })

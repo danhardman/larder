@@ -3,7 +3,7 @@
  * with a per-meal breakdown so you can see why. Pure; `features/shopping` renders it.
  */
 
-import type { Meal, Slot, Unit } from '../types'
+import { isAway, type Meal, type Slot, type Unit } from '../types'
 
 /** One meal's share of a shopping line. */
 export interface Contribution {
@@ -46,6 +46,7 @@ export function buildShoppingList(slots: Slot[], meals: Meal[]): ShoppingLine[] 
   const groups = new Map<string, ShoppingLine>()
 
   for (const slot of slots) {
+    if (isAway(slot)) continue
     const meal = slot.mealId ? byId.get(slot.mealId) : undefined
     if (!meal) continue
     for (const item of meal.ingredients) {

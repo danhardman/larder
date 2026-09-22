@@ -1,14 +1,39 @@
 import { useMemo, useState } from 'react'
 import { BottomSheet, SheetRow } from '../../components/BottomSheet'
 import { DAY_NAMES } from '../../lib/dates'
-import { SKIP_REASONS, type Meal, type WeekPlan } from '../../types'
+import { blankSlots } from '../../lib/generatePlan'
+import { AWAY_REASONS, AWAY_SHORT, SKIP_REASONS, type Meal, type Slot, type WeekPlan } from '../../types'
 import { candidatesFor } from './slotCandidates'
 import type { SlotActions } from './useSlotActions'
-import type { SlotScope } from './weekView'
+import { type SlotScope } from './weekView'
 
-export type SheetMode = 'actions' | 'pick' | 'skip' | 'skip-note'
+export type SheetMode = 'actions' | 'pick' | 'skip' | 'skip-note' | 'away' | 'away-note'
 
-/** Which slot the sheet is about, and which step of the sheet is showing. */
+function sheetTitle(mode: SheetMode, slot: Slot): string {
+  switch (mode) {
+    case 'pick':
+      return `Pick a ${slot.mealType}`
+    case 'skip':
+      return 'What happened?'
+    case 'away':
+      return 'What’s on instead?'
+    case 'skip-note':
+    case 'away-note':
+      return 'Anything to note?'
+    default:
+      return slot.away ? AWAY_SHORT[slot.away] : slot.mealName || 'Nothing here yet'
+  }
+}
+
+function sheetNote(mode: SheetMode, scope: SlotScope, slot: Slot): string | null {
+  if (mode !== 'actions') return null
+  if (slot.away) return 'Nothing gets cooked or bought for this one.'
+  if (scope === 'live') {
+    return 'The shopping’s already done for this week, so the plan stays put — just tell me how it went.'
+  }
+  return null
+}
+
 export interface SheetTarget {
   weekStart: string
   index: number
@@ -18,7 +43,7 @@ export interface SheetTarget {
 
 interface SlotSheetProps {
   target: SheetTarget
-  plan: WeekPlan
+  plan?: WeekPlan
   meals: Meal[]
   actions: SlotActions
   onChangeMode: (mode: SheetMode) => void
@@ -26,47 +51,60 @@ interface SlotSheetProps {
 }
 
 /**
- * The bottom sheet for a tapped slot. A live slot asks how it went; a draft
- * slot offers re-roll, pick, lock. Every action closes the sheet itself.
+ * The bottom sheet for a tapped slot. A live slot asks how it went; a draft slot
+ * offers re-roll, pick, lock, and "we're out that night". Every action closes the
+ * sheet itself.
  */
 export function SlotSheet({ target, plan, meals, actions, onChangeMode, onClose }: SlotSheetProps) {
   const { weekStart, index, scope, mode } = target
-  const slot = plan.slots[index]
-  const [skipNote, setSkipNote] = useState('')
+  const [note, setNote] = useState('')
+
+  const blank = useMemo(() => blankSlots(), [])
+  const slot = plan?.slots[index] ?? blank[index]
+  const drafted = !!plan && plan.status !== 'pencilled'
 
   const candidates = useMemo(
-    () => (mode === 'pick' ? candidatesFor(plan, index, meals) : []),
+    () => (mode === 'pick' && plan ? candidatesFor(plan, index, meals) : []),
     [mode, plan, index, meals],
   )
 
   if (!slot) return null
 
-  const skip = (note?: string) => {
-    onClose()
-    actions.markSkipped(weekStart, index, 'other', note)
-  }
+  const away = slot.away ?? null
+  const noteMode = mode === 'skip-note' || mode === 'away-note'
 
-  const title =
-    mode === 'pick'
-      ? `Pick a ${slot.mealType}`
-      : mode === 'skip'
-        ? 'What happened?'
-        : mode === 'skip-note'
-          ? 'Anything to note?'
-          : slot.mealName
+  const saveNote = (text?: string) => {
+    onClose()
+    if (mode === 'away-note') actions.markAway(weekStart, index, 'other', text)
+    else actions.markSkipped(weekStart, index, 'other', text)
+  }
 
   return (
     <BottomSheet
       kicker={`${scope === 'live' ? 'This week' : 'Planned'} · ${DAY_NAMES[slot.day]} ${slot.mealType}`}
-      title={title}
-      note={
-        mode === 'actions' && scope === 'live'
-          ? 'The shopping’s already done for this week, so the plan stays put — just tell me how it went.'
-          : null
-      }
+      title={sheetTitle(mode, slot)}
+      note={sheetNote(mode, scope, slot)}
       onClose={onClose}
     >
-      {mode === 'actions' && (
+      {mode === 'actions' && away && (
+        <div className="mt-4 flex flex-col gap-[7px]">
+          <SheetRow onClick={() => onChangeMode('away')} className="flex items-center gap-3">
+            <span className="text-[15px]">✏️</span> Change the reason
+          </SheetRow>
+          <SheetRow
+            onClick={() => {
+              onClose()
+              actions.clearAway(weekStart, index)
+            }}
+            className="flex items-center gap-3"
+          >
+            <span className="text-[15px]">🍽️</span>
+            {scope === 'live' ? 'Actually, we’re eating in' : 'Put a meal back'}
+          </SheetRow>
+        </div>
+      )}
+
+      {mode === 'actions' && !away && (
         <div className="mt-4 flex flex-col gap-[7px]">
           {scope === 'live' ? (
             <>
@@ -85,27 +123,34 @@ export function SlotSheet({ target, plan, meals, actions, onChangeMode, onClose 
             </>
           ) : (
             <>
-              <SheetRow
-                onClick={() => {
-                  onClose()
-                  actions.reroll(weekStart, index)
-                }}
-                className="flex items-center gap-3"
-              >
-                <span className="text-[15px]">🎲</span> Roll something else
-              </SheetRow>
-              <SheetRow onClick={() => onChangeMode('pick')} className="flex items-center gap-3">
-                <span className="text-[15px]">📖</span> Pick from the library
-              </SheetRow>
-              <SheetRow
-                onClick={() => {
-                  onClose()
-                  actions.setLocked(weekStart, index, !slot.locked)
-                }}
-                className="flex items-center gap-3"
-              >
-                <span className="text-[15px]">{slot.locked ? '🔓' : '🔒'}</span>
-                {slot.locked ? 'Unlock this slot' : 'Lock this slot'}
+              {drafted && (
+                <>
+                  <SheetRow
+                    onClick={() => {
+                      onClose()
+                      actions.reroll(weekStart, index)
+                    }}
+                    className="flex items-center gap-3"
+                  >
+                    <span className="text-[15px]">🎲</span> Roll something else
+                  </SheetRow>
+                  <SheetRow onClick={() => onChangeMode('pick')} className="flex items-center gap-3">
+                    <span className="text-[15px]">📖</span> Pick from the library
+                  </SheetRow>
+                  <SheetRow
+                    onClick={() => {
+                      onClose()
+                      actions.setLocked(weekStart, index, !slot.locked)
+                    }}
+                    className="flex items-center gap-3"
+                  >
+                    <span className="text-[15px]">{slot.locked ? '🔓' : '🔒'}</span>
+                    {slot.locked ? 'Unlock this slot' : 'Lock this slot'}
+                  </SheetRow>
+                </>
+              )}
+              <SheetRow onClick={() => onChangeMode('away')} className="flex items-center gap-3">
+                <span className="text-[15px]">🚪</span> We’re out that {slot.mealType}
               </SheetRow>
             </>
           )}
@@ -137,20 +182,21 @@ export function SlotSheet({ target, plan, meals, actions, onChangeMode, onClose 
         </div>
       )}
 
-      {mode === 'skip' && (
+      {(mode === 'skip' || mode === 'away') && (
         <div className="mt-[14px] flex flex-col gap-[6px]">
-          {SKIP_REASONS.map((reason) => (
+          {(mode === 'away' ? AWAY_REASONS : SKIP_REASONS).map((reason) => (
             <SheetRow
               key={reason.value}
               onClick={() => {
                 // Only "other" earns a second tap — the named reasons must stay one.
                 if (reason.value === 'other') {
-                  setSkipNote('')
-                  onChangeMode('skip-note')
+                  setNote('')
+                  onChangeMode(mode === 'away' ? 'away-note' : 'skip-note')
                   return
                 }
                 onClose()
-                actions.markSkipped(weekStart, index, reason.value)
+                if (mode === 'away') actions.markAway(weekStart, index, reason.value)
+                else actions.markSkipped(weekStart, index, reason.value)
               }}
               className="rounded-[14px]"
             >
@@ -160,25 +206,25 @@ export function SlotSheet({ target, plan, meals, actions, onChangeMode, onClose 
         </div>
       )}
 
-      {mode === 'skip-note' && (
+      {noteMode && (
         <div className="mt-[14px] flex flex-col gap-[6px]">
           <input
             type="text"
-            value={skipNote}
-            onChange={(e) => setSkipNote(e.target.value)}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') skip(skipNote)
+              if (e.key === 'Enter') saveNote(note)
             }}
-            placeholder="Freezer raid, out late…"
+            placeholder={mode === 'away-note' ? 'Birthday lunch, work do…' : 'Freezer raid, out late…'}
             maxLength={80}
             autoFocus
             className="input"
           />
-          <SheetRow onClick={() => skip(skipNote)} className="rounded-[14px]">
+          <SheetRow onClick={() => saveNote(note)} className="rounded-[14px]">
             Save
           </SheetRow>
-          <SheetRow onClick={() => skip()} className="rounded-[14px] text-neutral-600">
-            Skip without a note
+          <SheetRow onClick={() => saveNote()} className="rounded-[14px] text-neutral-600">
+            {mode === 'away-note' ? 'Save without a note' : 'Skip without a note'}
           </SheetRow>
         </div>
       )}

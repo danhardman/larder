@@ -1,9 +1,28 @@
 import { AlertIcon } from '../../components/icons'
 import { addDays, DAY_NAMES, formatDay } from '../../lib/dates'
 import { portionWarning, type MealStats } from '../../lib/stats'
-import { SKIP_REASON_SHORT, type Meal, type WeekPlan } from '../../types'
+import { AWAY_SHORT, isAway, SKIP_REASON_SHORT, type Meal, type Slot, type WeekPlan } from '../../types'
 import { DayCard } from './DayCard'
 import { slotsForDay, TYPE_INITIAL, type WeekView } from './weekView'
+
+function outcomeLabel(slot: Slot): string {
+  if (slot.away) return slot.awayNote || AWAY_SHORT[slot.away]
+
+  switch (slot.outcome) {
+    case 'eaten':
+      switch (slot.portionFeedback) {
+        case 'too_much':
+          return 'Too much'
+        case 'not_enough':
+          return 'Not enough'
+        default:
+          return 'Eaten'
+      }
+    // Skipped, or still pending — a reason may have been recorded either way.
+    default:
+      return slot.skipReason ? SKIP_REASON_SHORT[slot.skipReason] : 'Not ticked'
+  }
+}
 
 interface PastWeekProps {
   week: WeekView
@@ -16,8 +35,9 @@ interface PastWeekProps {
 export function PastWeek({ week, meals, stats, onEditMeal }: PastWeekProps) {
   const plan = week.plan as WeekPlan
   const eaten = plan.slots.filter((s) => s.outcome === 'eaten').length
-  const skipped = plan.slots.filter((s) => s.outcome === 'skipped').length
-  const total = plan.slots.length || 1
+  const skipped = plan.slots.filter((s) => !isAway(s) && s.outcome === 'skipped').length
+  const out = plan.slots.filter(isAway).length
+  const total = plan.slots.length - out || 1
 
   const plannedIds = new Set(plan.slots.map((s) => s.mealId).filter(Boolean) as string[])
   const heavy = meals.find((m) => plannedIds.has(m.id) && portionWarning(stats.get(m.id)))
@@ -30,6 +50,7 @@ export function PastWeek({ week, meals, stats, onEditMeal }: PastWeekProps) {
           {[
             { value: eaten, label: 'eaten', tone: 'text-sage-700' },
             { value: skipped, label: 'skipped', tone: 'text-accent-700' },
+            ...(out ? [{ value: out, label: 'out', tone: 'text-neutral-700' }] : []),
             { value: `${Math.round((eaten / total) * 100)}%`, label: 'as planned', tone: 'text-neutral-800' },
           ].map((stat) => (
             <div key={stat.label}>
@@ -58,7 +79,8 @@ export function PastWeek({ week, meals, stats, onEditMeal }: PastWeekProps) {
         {Array.from({ length: 7 }, (_, d) => (
           <DayCard key={d} name={DAY_NAMES[d]} date={formatDay(addDays(week.start, d))}>
             <div className="grid grid-cols-3 gap-[7px]">
-              {slotsForDay(plan, d).map(({ slot, index }) => {
+              {slotsForDay(plan.slots, d).map(({ slot, index }) => {
+                const away = slot.away ?? null
                 const wasEaten = slot.outcome === 'eaten'
                 return (
                   <div
@@ -78,18 +100,10 @@ export function PastWeek({ week, meals, stats, onEditMeal }: PastWeekProps) {
                       className={`text-[12px] leading-[1.2] font-semibold ${wasEaten ? '' : 'opacity-45'}`}
                       style={{ textWrap: 'pretty' }}
                     >
-                      {slot.mealName}
+                      {away ? 'Out' : slot.mealName}
                     </span>
                     <span className="mt-auto text-[9.5px] font-bold text-neutral-600">
-                      {wasEaten
-                        ? slot.portionFeedback === 'too_much'
-                          ? 'Too much'
-                          : slot.portionFeedback === 'not_enough'
-                            ? 'Not enough'
-                            : 'Eaten'
-                        : slot.skipReason
-                          ? SKIP_REASON_SHORT[slot.skipReason]
-                          : 'Not ticked'}
+                      {outcomeLabel(slot)}
                     </span>
                   </div>
                 )

@@ -5,7 +5,7 @@
  */
 
 import { rngFrom, shuffled, type Rng } from './rng'
-import { MEAL_TYPES, type Meal, type MealType, type Season, type Slot, type WeekPlan } from '../types'
+import { isAway, MEAL_TYPES, type Meal, type MealType, type Season, type Slot, type WeekPlan } from '../types'
 
 /** What the generator needs; the store assembles this from household state. */
 export interface GenerateInput {
@@ -16,7 +16,7 @@ export interface GenerateInput {
   seed: number
   rotationSize: number
   recencyWindowWeeks: number
-  /** Existing slots; any marked `locked` are carried through untouched. */
+  /** Existing slots; any marked `locked` or planned away are carried through untouched. */
   keep?: Slot[]
 }
 
@@ -96,17 +96,32 @@ function countMeal(tally: Tally, meal: Meal) {
   tally.prevProtein = meal.protein
 }
 
-function emptySlot(day: number, mealType: MealType): Slot {
+function emptySlot(day: number, mealType: MealType, mealName = EMPTY_SLOT_NAME): Slot {
   return {
     day,
     mealType,
     mealId: null,
-    mealName: EMPTY_SLOT_NAME,
+    mealName,
     locked: false,
+    away: null,
+    awayNote: null,
     outcome: 'pending',
     skipReason: null,
     portionFeedback: null,
   }
+}
+
+/**
+ * A week of empty slots, named blank rather than "Nothing suitable" — nothing has been
+ * asked of the library yet. Written when a slot is marked away on a week that hasn't
+ * been drafted, so the marking has a document to live on.
+ */
+export function blankSlots(): Slot[] {
+  const slots: Slot[] = []
+  for (let day = 0; day < 7; day++) {
+    for (const mealType of MEAL_TYPES) slots.push(emptySlot(day, mealType, ''))
+  }
+  return slots
 }
 
 function slotFor(day: number, mealType: MealType, meal: Meal | null): Slot {
@@ -125,8 +140,10 @@ export function generatePlan(input: GenerateInput): GenerateResult {
   const byId = new Map(library.map((m) => [m.id, m]))
   const thin = new Set<string>()
 
-  const lockedAt = (day: number, type: MealType) =>
-    keep.find((s) => s.day === day && s.mealType === type && s.locked) ?? null
+  // Both kinds of slot the generator must not touch: locked ones the user chose to
+  // protect, and ones they've said they're out for (which stay empty).
+  const keepAt = (day: number, type: MealType) =>
+    keep.find((s) => s.day === day && s.mealType === type && (s.locked || isAway(s))) ?? null
 
   const rotations: Record<string, Meal[]> = {}
   const spoken = new Set<string>()
@@ -151,12 +168,13 @@ export function generatePlan(input: GenerateInput): GenerateResult {
   // flexible breakfast/lunch rotation is what bends to avoid a same-day clash.
   const dinners: (Meal | null)[] = []
   for (let day = 0; day < 7; day++) {
-    const locked = lockedAt(day, 'dinner')
-    const lockedMeal = locked?.mealId ? (byId.get(locked.mealId) ?? null) : null
-    const meal = locked
-      ? lockedMeal
+    const kept = keepAt(day, 'dinner')
+    const keptMeal = kept?.mealId ? (byId.get(kept.mealId) ?? null) : null
+    const meal = kept
+      ? keptMeal
       : pickDinner(dinnerPool, usedDinners, usedByDay[day], tally, recent, rng, isWeekendDay(day))
-    if (!locked && !meal) thin.add('dinners')
+    // An away night doesn't consume a dinner, and its emptiness isn't a thin library.
+    if (!kept && !meal) thin.add('dinners')
     if (meal) {
       usedDinners.add(meal.id)
       usedByDay[day].add(meal.id)
@@ -168,10 +186,11 @@ export function generatePlan(input: GenerateInput): GenerateResult {
   const slots: Slot[] = []
   for (let day = 0; day < 7; day++) {
     for (const mealType of MEAL_TYPES) {
-      const locked = lockedAt(day, mealType)
-      if (locked) {
-        slots.push({ ...locked, outcome: 'pending', skipReason: null, portionFeedback: null })
-        if (locked.mealId) usedByDay[day].add(locked.mealId)
+      const kept = keepAt(day, mealType)
+      if (kept) {
+        // `away`/`awayNote` ride along on the spread; the outcome fields reset.
+        slots.push({ ...kept, outcome: 'pending', skipReason: null, portionFeedback: null })
+        if (kept.mealId) usedByDay[day].add(kept.mealId)
         continue
       }
       if (mealType === 'dinner') {

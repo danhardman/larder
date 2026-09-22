@@ -44,6 +44,7 @@ import {
   type Meal,
   type MemberProfile,
   type Settings,
+  type Slot,
   type WeekPlan,
 } from '../types'
 import { db } from './firebase'
@@ -119,11 +120,12 @@ export function toIngredient(id: string, data: DocumentData): Ingredient {
 }
 
 export function toPlan(id: string, data: DocumentData): WeekPlan {
+  const slots: Slot[] = data.slots ?? []
   return {
     id: data.id ?? id,
     weekStart: data.weekStart ?? id,
-    slots: data.slots ?? [],
-    status: data.status ?? 'draft',
+    slots,
+    status: data.status ?? 'pencilled',
     seed: data.seed ?? 0,
     thin: data.thin ?? [],
     generatedBy: data.generatedBy ?? 'client',

@@ -1,5 +1,5 @@
 import { CheckIcon } from '../../components/icons'
-import { PORTION_SHORT, SKIP_REASON_SHORT, type Slot } from '../../types'
+import { AWAY_SHORT, PORTION_SHORT, SKIP_REASON_SHORT, type Slot } from '../../types'
 import { liveTone } from './weekView'
 
 interface TodaySlotProps {
@@ -11,6 +11,7 @@ interface TodaySlotProps {
 /** One of today's three meals: big enough to tap "Ate it" without aiming. */
 export function TodaySlot({ slot, onOpen, onTick }: TodaySlotProps) {
   const tone = liveTone(slot, true)
+  const away = slot.away ?? null
   return (
     <div
       className={`flex min-h-[134px] flex-col rounded-md border-[1.5px] px-[10px] pt-[11px] pb-[10px] shadow-sm ${tone.box}`}
@@ -26,9 +27,14 @@ export function TodaySlot({ slot, onOpen, onTick }: TodaySlotProps) {
         }`}
         style={{ textWrap: 'pretty' }}
       >
-        {slot.mealName}
+        {away ? 'Out' : slot.mealName}
       </button>
-      {slot.outcome === 'pending' && (
+      {away && (
+        <div className="mt-2 truncate text-[11px] font-semibold text-neutral-600">
+          {slot.awayNote || AWAY_SHORT[away]}
+        </div>
+      )}
+      {!away && slot.outcome === 'pending' && (
         <button
           type="button"
           onClick={onTick}
@@ -38,13 +44,13 @@ export function TodaySlot({ slot, onOpen, onTick }: TodaySlotProps) {
           Ate it
         </button>
       )}
-      {slot.outcome === 'eaten' && (
+      {!away && slot.outcome === 'eaten' && (
         <div className="mt-2 flex items-center gap-[5px] text-[11.5px] font-bold text-sage-700">
           <CheckIcon size={13} />
           {slot.portionFeedback ? PORTION_SHORT[slot.portionFeedback] : 'Ate it'}
         </div>
       )}
-      {slot.outcome === 'skipped' && (
+      {!away && slot.outcome === 'skipped' && (
         <div className="mt-2 truncate text-[11px] font-semibold text-neutral-600">
           {slot.skipNote || (slot.skipReason ? SKIP_REASON_SHORT[slot.skipReason] : 'Skipped')}
         </div>

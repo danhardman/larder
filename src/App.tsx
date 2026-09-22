@@ -55,7 +55,11 @@ export default function App() {
   const sheetPlan = sheet ? store.planFor(sheet.weekStart) : undefined
   const { week } = weeks
   const showActionBar =
-    screen === 'weeks' && week.offset >= 0 && week.plan?.status === 'draft' && !sheet && !library.editing
+    screen === 'weeks' &&
+    week.offset >= 0 &&
+    week.plan?.status === 'draft' &&
+    !sheet &&
+    !library.editing
   const showFab = screen === 'library' && !library.editing
 
   return (
@@ -160,7 +164,9 @@ export default function App() {
         <TabBar
           screen={screen}
           dots={{
-            weeks: weeks.weeks.some((w) => w.offset === 1 && !w.plan),
+            weeks: weeks.weeks.some(
+              (w) => w.offset === 1 && (!w.plan || w.plan.status === 'pencilled'),
+            ),
             shop: !!shopping.lines,
           }}
           onPick={goTo}
@@ -177,7 +183,7 @@ export default function App() {
           </button>
         )}
 
-        {sheet && sheetPlan && (
+        {sheet && (
           <SlotSheet
             target={sheet}
             plan={sheetPlan}
