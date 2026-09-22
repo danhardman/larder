@@ -16,6 +16,15 @@ export function currentSeason(today = new Date()): Season {
   return seasonForMonth(today.getMonth())
 }
 
+/**
+ * The season of the week a plan covers, not today's — drafting in late February
+ * for a March week must pick spring meals. A week straddling a month boundary
+ * takes the month it starts in.
+ */
+export function seasonForWeek(weekStart: Date): Season {
+  return seasonForMonth(weekStart.getMonth())
+}
+
 export function startOfWeek(date: Date): Date {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   // getDay() is Sunday-first; we want Monday as day 0.

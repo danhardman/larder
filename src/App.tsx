@@ -6,10 +6,11 @@ import { Toast } from './components/Toast'
 import { ArrowRightIcon, PlusIcon, ShuffleIcon } from './components/icons'
 import {
   addWeeks,
-  currentSeason,
   DAY_NAMES,
   formatDay,
   formatWeekRange,
+  fromISODate,
+  seasonForWeek,
   startOfWeek,
   toISODate,
 } from './lib/dates'
@@ -29,7 +30,7 @@ type SheetTarget = {
   weekStart: string
   index: number
   scope: 'live' | 'draft'
-  mode: 'actions' | 'pick' | 'skip'
+  mode: 'actions' | 'pick' | 'skip' | 'skip-note'
 }
 
 const CHIP = {
@@ -40,7 +41,6 @@ const CHIP = {
 
 export default function App() {
   const store = useLarder()
-  const season = currentSeason()
 
   const [screen, setScreen] = useState<Screen>('weeks')
   const [weekIndex, setWeekIndex] = useState(1)
@@ -52,6 +52,7 @@ export default function App() {
   const [confirmDelete, setConfirmDelete] = useState<Meal | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [thinHint, setThinHint] = useState<string | null>(null)
+  const [skipNote, setSkipNote] = useState('')
   const [copied, setCopied] = useState(false)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -73,6 +74,8 @@ export default function App() {
   }, [store.plans])
 
   const week = weeks[weekIndex]
+  // Every season decision is about a specific week, never about today.
+  const weekSeason = seasonForWeek(week.start)
 
   const cards: WeekCard[] = weeks.map((w) => {
     const plan = w.plan
@@ -149,9 +152,16 @@ export default function App() {
     setPortionFor({ weekStart, index })
   }
 
-  const markSkipped = (weekStart: string, index: number, reason: SkipReason, label: string) => {
-    store.patchSlot(weekStart, index, { outcome: 'skipped', skipReason: reason, portionFeedback: null })
+  const markSkipped = (weekStart: string, index: number, reason: SkipReason, note?: string) => {
+    store.patchSlot(weekStart, index, {
+      outcome: 'skipped',
+      skipReason: reason,
+      // Empty stays null rather than '', so "has a note" is one truthy check.
+      skipNote: note?.trim() || null,
+      portionFeedback: null,
+    })
     setSheet(null)
+    const label = SKIP_REASONS.find((r) => r.value === reason)?.label ?? 'Skipped'
     say(`Noted — ${label.toLowerCase()}.`)
   }
 
@@ -164,7 +174,13 @@ export default function App() {
   const reroll = (weekStart: string, index: number) => {
     const plan = store.planFor(weekStart)
     if (!plan) return
-    const pick = rerollSlot(plan.slots, index, store.meals, season, rngFrom(Date.now() >>> 0))
+    const pick = rerollSlot(
+      plan.slots,
+      index,
+      store.meals,
+      seasonForWeek(fromISODate(plan.weekStart)),
+      rngFrom(Date.now() >>> 0),
+    )
     setSheet(null)
     if (!pick) {
       say('Library’s a bit thin there — add another one?')
@@ -176,8 +192,9 @@ export default function App() {
 
   const draftWeek = (weekStart: string) => {
     const { thin } = store.draftWeek(weekStart)
+    const drafted = seasonForWeek(fromISODate(weekStart))
     setThinHint(
-      thin.length ? `Your library’s a bit thin for ${season} ${thin[0]} — worth adding one or two.` : null,
+      thin.length ? `Your library’s a bit thin for ${drafted} ${thin[0]} — worth adding one or two.` : null,
     )
     say('Here’s a draft — have a look before we shop.')
   }
@@ -201,10 +218,12 @@ export default function App() {
     if (sheetSlot.mealType === 'dinner') {
       for (const s of sheetPlan.slots) if (s.mealType === 'dinner' && s.mealId) used.add(s.mealId)
     }
-    return eligible(store.meals, sheetSlot.mealType, season).filter(
-      (m) => m.id === sheetSlot.mealId || !used.has(m.id),
-    )
-  }, [sheet, sheetPlan, sheetSlot, store.meals, season])
+    return eligible(
+      store.meals,
+      sheetSlot.mealType,
+      seasonForWeek(fromISODate(sheetPlan.weekStart)),
+    ).filter((m) => m.id === sheetSlot.mealId || !used.has(m.id))
+  }, [sheet, sheetPlan, sheetSlot, store.meals])
 
   /* ── Library ──────────────────────────────────────────────────────────── */
 
@@ -250,7 +269,7 @@ export default function App() {
                 setSheet(null)
                 setPortionFor(null)
               }}
-              seasonLabel={season}
+              seasonLabel={weekSeason}
               meals={store.meals}
               stats={store.stats}
               portionFor={portionFor}
@@ -368,7 +387,9 @@ export default function App() {
                 ? `Pick a ${sheetSlot.mealType}`
                 : sheet.mode === 'skip'
                   ? 'What happened?'
-                  : sheetSlot.mealName
+                  : sheet.mode === 'skip-note'
+                    ? 'Anything to note?'
+                    : sheetSlot.mealName
             }
             note={
               sheet.mode === 'actions' && sheet.scope === 'live'
@@ -458,12 +479,53 @@ export default function App() {
                 {SKIP_REASONS.map((reason) => (
                   <SheetRow
                     key={reason.value}
-                    onClick={() => markSkipped(sheet.weekStart, sheet.index, reason.value, reason.label)}
+                    onClick={() => {
+                      // Only "other" earns a second tap — the named reasons must stay one.
+                      if (reason.value === 'other') {
+                        setSkipNote('')
+                        setSheet({ ...sheet, mode: 'skip-note' })
+                        return
+                      }
+                      markSkipped(sheet.weekStart, sheet.index, reason.value)
+                    }}
                     className="rounded-[14px]"
                   >
                     {reason.label}
                   </SheetRow>
                 ))}
+              </div>
+            )}
+
+            {sheet.mode === 'skip-note' && (
+              <div className="mt-[14px] flex flex-col gap-[6px]">
+                <input
+                  type="text"
+                  value={skipNote}
+                  onChange={(e) => setSkipNote(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      markSkipped(sheet.weekStart, sheet.index, 'other', skipNote)
+                    }
+                  }}
+                  placeholder="Freezer raid, out late…"
+                  maxLength={80}
+                  autoFocus
+                  className="input text-[16px]"
+                />
+                <SheetRow
+                  onClick={() =>
+                    markSkipped(sheet.weekStart, sheet.index, 'other', skipNote)
+                  }
+                  className="rounded-[14px]"
+                >
+                  Save
+                </SheetRow>
+                <SheetRow
+                  onClick={() => markSkipped(sheet.weekStart, sheet.index, 'other')}
+                  className="rounded-[14px] text-neutral-600"
+                >
+                  Skip without a note
+                </SheetRow>
               </div>
             )}
           </BottomSheet>

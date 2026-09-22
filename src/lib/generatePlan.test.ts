@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { generatePlan, eligible, rerollSlot } from './generatePlan'
 import { rngFrom } from './rng'
-import { seasonForMonth } from './dates'
 import { SEED_MEALS } from './seedLibrary'
 import type { Meal, Slot, WeekPlan } from '../types'
 
@@ -15,15 +14,6 @@ const base = {
 }
 
 const dinners = (slots: Slot[]) => slots.filter((s) => s.mealType === 'dinner')
-
-describe('seasonForMonth', () => {
-  it('maps the northern-hemisphere calendar', () => {
-    expect(seasonForMonth(0)).toBe('winter')
-    expect(seasonForMonth(3)).toBe('spring')
-    expect(seasonForMonth(6)).toBe('summer')
-    expect(seasonForMonth(9)).toBe('autumn')
-  })
-})
 
 describe('generatePlan', () => {
   it('fills 7 days × 3 slots', () => {

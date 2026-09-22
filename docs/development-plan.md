@@ -22,7 +22,7 @@ built against a subset of the spec. The app runs, 28 tests pass, `tsc -b` is cle
 | Setup docs | `docs/firebase-setup.md`, `docs/cloudflare-pages-setup.md` | Already written and accurate — the stages below point at them rather than repeating them |
 
 **The gaps:** no Firebase at all (SDK installed, never imported), no household scoping, no auth, no real
-ingredient catalog, no Settings screen, no insights view, plus dead stubs (`effort`, `skipNote`, the
+ingredient catalog, no Settings screen, no insights view, plus dead stubs (`effort`, the
 `Ingredient` interface) and three genuine bugs.
 
 **Intended outcome:** a shared, installable, Firestore-backed PWA on Cloudflare Pages.
@@ -104,7 +104,7 @@ Stage 3 adds membership.
 
 ---
 
-## Stage 1 — Correctness fixes in the pure modules
+## Stage 1 — Correctness fixes in the pure modules ✅ done
 
 No Firebase, so this is independent of Stage 0 and can be done while you're in the console. It lives in
 pure `src/lib/` modules the Firestore migration won't touch, so none of it gets thrown away.
@@ -122,6 +122,29 @@ pure `src/lib/` modules the Firestore migration won't touch, so none of it gets 
 
 **Review:** `pnpm test`, `pnpm typecheck`, `pnpm lint`. Draft a week and confirm the season label matches
 the target week, not today.
+
+### Outcome
+
+All four done. 43 tests across 5 files, `tsc -b` and `oxlint` clean.
+
+- **Season** — new `seasonForWeek` in `src/lib/dates.ts`. A week takes the season of the month it
+  *starts* in, so a Mon-23-Feb week stays winter even though it reaches March; the rule is deliberate
+  and commented. `src/state/store.tsx` drafts with it, and `src/App.tsx` no longer holds a single
+  module-level `currentSeason()` — the season label, the thin-library hint, the re-roll and the
+  pick-from-library candidate list each derive it from the week they actually act on.
+- **`skipNote`** — "Something else" is now the only skip reason that costs a second tap: it opens a
+  note field with **Save** and **Skip without a note**. The named reasons still commit on one tap, per
+  the spec's no-friction rule. An empty note stays `null`. The live-week slot shows the note in place
+  of "Skipped"; the past-week micro-grid keeps `SKIP_REASON_SHORT`, since free text doesn't fit a
+  9.5px fixed-height cell. `markSkipped` now resolves its own toast label from `SKIP_REASONS` rather
+  than taking it as an argument.
+- **Tests** — `statsByMeal` (draft weeks excluded, eaten/skipped split, `timesRated` counting only
+  rated cooks, stale feedback on a skipped slot ignored) and `portionWarning` (the 3-cook floor, both
+  warning directions, and the 2-of-4 tie that must *not* warn). `seasonForMonth`'s tests moved from
+  `generatePlan.test.ts` into the new `src/lib/dates.test.ts` alongside `seasonForWeek`.
+- **`strict`** — on in both `tsconfig.app.json` and `tsconfig.node.json`, and it cost nothing: the
+  existing tree was already strict-clean. `noUncheckedIndexedAccess` was deliberately left off; it
+  does produce errors across the slot indexing and belongs to its own decision.
 
 ---
 
@@ -269,7 +292,8 @@ Lowest-value items, batched last so you can stop before them without losing anyt
 
 ## Verification (every stage)
 
-- `pnpm test` and `pnpm typecheck` — both green today (28 tests, 4 files); keep them green.
+- `pnpm test` and `pnpm typecheck` — both green today (43 tests, 5 files); keep them green.
+  Note `test` is `vitest` with no `run` flag, so it watches; use `pnpm vitest run` for a one-shot.
 - `pnpm lint` (oxlint).
 - `pnpm dev` alongside `firebase emulators:start` from Stage 2 onward — never against production data.
 - A manual pass on the phone for anything touching auth or install behaviour. The desktop browser will not

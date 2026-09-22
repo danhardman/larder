@@ -134,8 +134,8 @@ function TodaySlot({
         </div>
       )}
       {slot.outcome === 'skipped' && (
-        <div className="mt-2 text-[11px] font-semibold text-neutral-600">
-          {slot.skipReason ? SKIP_REASON_SHORT[slot.skipReason] : 'Skipped'}
+        <div className="mt-2 truncate text-[11px] font-semibold text-neutral-600">
+          {slot.skipNote || (slot.skipReason ? SKIP_REASON_SHORT[slot.skipReason] : 'Skipped')}
         </div>
       )}
     </div>

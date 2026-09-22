@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { currentSeason } from '../lib/dates'
+import { fromISODate, seasonForWeek } from '../lib/dates'
 import { generatePlan } from '../lib/generatePlan'
 import { randomSeed } from '../lib/rng'
 import { mealsInUse, statsByMeal, type MealStats } from '../lib/stats'
@@ -48,7 +48,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
       const result = generatePlan({
         library: data.meals,
         history: Object.values(data.plans).filter((p) => p.weekStart < weekStart),
-        season: currentSeason(),
+        season: seasonForWeek(fromISODate(weekStart)),
         seed,
         rotationSize: data.settings.rotationSize,
         recencyWindowWeeks: data.settings.recencyWindowWeeks,
