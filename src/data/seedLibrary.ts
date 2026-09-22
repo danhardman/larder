@@ -1,15 +1,25 @@
 /**
- * The starter library a new household gets. Data, not logic: `state/storage.ts`
- * loads it on first run, and the Stage 2 seed script writes it to the emulator.
+ * The starter library a new household gets. Data, not logic: `scripts/seed.ts`
+ * writes the meals and their ingredient catalog to the emulator.
  */
 
-import type { CarbBase, Meal, MealIngredient, MealType, Protein, Season, Unit } from '../types'
+import type { CarbBase, Ingredient, Meal, MealIngredient, MealType, Protein, Season, Unit } from '../types'
 import { SEASONS } from '../types'
 
 const ALL_SEASONS: Season[] = SEASONS
 
+/** Built up as the meals below are declared; one entry per distinct name. */
+const catalog = new Map<string, Ingredient>()
+
+/** Deterministic ids (`i-chopped-tomatoes`) so re-seeding is idempotent. */
 function ing(name: string, quantity: number, unit: Unit): MealIngredient {
-  return { ingredientId: name.toLowerCase(), name, quantity, unit }
+  const nameLower = name.toLowerCase()
+  let entry = catalog.get(nameLower)
+  if (!entry) {
+    entry = { id: `i-${nameLower.replace(/[^a-z0-9]+/g, '-')}`, name, nameLower }
+    catalog.set(nameLower, entry)
+  }
+  return { ingredientId: entry.id, name: entry.name, quantity, unit }
 }
 
 function meal(
@@ -91,3 +101,6 @@ export const SEED_MEALS: Meal[] = [
     ing('milk', 400, 'ml'),
   ]),
 ]
+
+/** Every ingredient the seed meals use — the catalog they are written alongside. */
+export const SEED_INGREDIENTS: Ingredient[] = [...catalog.values()]

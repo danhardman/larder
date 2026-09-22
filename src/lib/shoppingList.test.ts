@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildShoppingList, formatShoppingList } from './shoppingList'
+import { buildShoppingList, formatShoppingList, lineKey } from './shoppingList'
 import type { Meal, Slot } from '../types'
 
 function meal(id: string, name: string, ingredients: Meal['ingredients']): Meal {
@@ -72,6 +72,37 @@ describe('buildShoppingList', () => {
     const [line] = buildShoppingList(slots, [bacon])
     expect(line.total).toBe(8)
     expect(line.contributions).toEqual([{ mealName: 'Bacon sandwich', each: 2, times: 4 }])
+  })
+
+  it('sums by catalog id, so differently-cased copies of a name are one line', () => {
+    const shouty = meal('e', 'Shouty fajitas', [
+      { ingredientId: 'chicken', name: 'Chicken Thighs', quantity: 200, unit: 'g' },
+    ])
+    const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), slot(1, 'e', 'Shouty fajitas')], [
+      fajitas,
+      shouty,
+    ])
+    const chicken = lines.filter((l) => l.ingredientId === 'chicken')
+    expect(chicken).toHaveLength(1)
+    expect(chicken[0].total).toBe(500)
+    expect(lineKey(chicken[0])).toBe('chicken|g')
+  })
+
+  it('keeps the same name on separate lines when the ids differ', () => {
+    const other = meal('f', 'Other chicken', [
+      { ingredientId: 'chicken-2', name: 'chicken thighs', quantity: 100, unit: 'g' },
+    ])
+    const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), slot(1, 'f', 'Other chicken')], [
+      fajitas,
+      other,
+    ])
+    expect(lines.filter((l) => l.name === 'chicken thighs')).toHaveLength(2)
+  })
+
+  it('falls back to the name for a row with no id', () => {
+    const legacy = meal('g', 'Legacy', [{ ingredientId: '', name: 'Eggs', quantity: 6, unit: 'piece' }])
+    const [line] = buildShoppingList([slot(0, 'g', 'Legacy')], [legacy])
+    expect(line.ingredientId).toBe('eggs')
   })
 
   it('ignores slots with no meal', () => {

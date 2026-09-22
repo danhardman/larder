@@ -41,7 +41,7 @@ export interface WeekPlan {
   thin: string[]
   /** Which side produced this plan. Always `client` until the backend lands. */
   generatedBy: 'client' | 'server'
-  /** Shopping-list ticks for this week, keyed by `name|unit`. */
+  /** Shopping-list ticks for this week, keyed by `ingredientId|unit` (`lineKey`). */
   ticked: Record<string, boolean>
 }
 

@@ -9,7 +9,8 @@
  *     /meals/{mealId}              doc id = meal.id
  *     /weekPlans/{weekStart}       doc id = the ISO Monday, so one plan per week is
  *                                  structural and two devices drafting offline converge
- *     /ingredients/{ingredientId}  Stage 4
+ *     /ingredients/{ingredientId}  { name, nameLower } — the autocomplete catalog; a
+ *                                  meal's ingredients carry the id plus a copy of the name
  *   /invites/{email}               a pending invitation, keyed by lower-cased email
  *   /founders/{email}              who may found a household (beta gate); never read
  *                                  by the client, only by the rules
@@ -32,9 +33,19 @@ import {
   writeBatch,
   type DocumentData,
   type FirestoreError,
+  type WriteBatch,
 } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
-import { DEFAULT_SETTINGS, type Household, type Invite, type Meal, type MemberProfile, type Settings, type WeekPlan } from '../types'
+import {
+  DEFAULT_SETTINGS,
+  type Household,
+  type Ingredient,
+  type Invite,
+  type Meal,
+  type MemberProfile,
+  type Settings,
+  type WeekPlan,
+} from '../types'
 import { db } from './firebase'
 
 export const householdsCol = () => collection(db, 'households')
@@ -43,6 +54,8 @@ export const mealsCol = (hid: string) => collection(householdRef(hid), 'meals')
 export const mealRef = (hid: string, mealId: string) => doc(mealsCol(hid), mealId)
 export const weekPlansCol = (hid: string) => collection(householdRef(hid), 'weekPlans')
 export const weekPlanRef = (hid: string, weekStart: string) => doc(weekPlansCol(hid), weekStart)
+export const ingredientsCol = (hid: string) => collection(householdRef(hid), 'ingredients')
+export const ingredientRef = (hid: string, ingredientId: string) => doc(ingredientsCol(hid), ingredientId)
 export const invitesCol = () => collection(db, 'invites')
 export const inviteRef = (email: string) => doc(invitesCol(), normaliseEmail(email))
 
@@ -100,6 +113,11 @@ export function toMeal(id: string, data: DocumentData): Meal {
   }
 }
 
+export function toIngredient(id: string, data: DocumentData): Ingredient {
+  const name: string = data.name ?? ''
+  return { id, name, nameLower: data.nameLower ?? name.toLowerCase() }
+}
+
 export function toPlan(id: string, data: DocumentData): WeekPlan {
   return {
     id: data.id ?? id,
@@ -110,6 +128,63 @@ export function toPlan(id: string, data: DocumentData): WeekPlan {
     thin: data.thin ?? [],
     generatedBy: data.generatedBy ?? 'client',
     ticked: data.ticked ?? {},
+  }
+}
+
+/*
+ * The ingredient catalog (spec §3). Subscribed lazily — only while the meal editor is
+ * open — so it never delays first render; see `state/ingredients.ts`.
+ */
+
+export function subscribeIngredients(
+  hid: string,
+  onChange: (ingredients: Ingredient[]) => void,
+  onError: (err: FirestoreError) => void,
+) {
+  return onSnapshot(
+    ingredientsCol(hid),
+    (snap) => onChange(snap.docs.map((d) => toIngredient(d.id, d.data()))),
+    onError,
+  )
+}
+
+/** The catalog doc's exact shape — the rules reject anything else. */
+const ingredientDoc = (name: string) => ({ name, nameLower: name.toLowerCase() })
+
+/**
+ * Save a meal together with any catalog entries it introduces, atomically. The
+ * editor resolves names against the in-memory catalog first (`resolveIngredients`),
+ * so `created` only holds names the household hasn't used before. Two devices
+ * inventing the same name offline can still both create it — the rules can't
+ * enforce uniqueness across random ids — which is accepted at household scale.
+ */
+export function commitMeal(hid: string, meal: Meal, created: Ingredient[]): Promise<void> {
+  const batch = writeBatch(db)
+  for (const ingredient of created) batch.set(ingredientRef(hid, ingredient.id), ingredientDoc(ingredient.name))
+  batch.set(mealRef(hid, meal.id), meal)
+  return batch.commit()
+}
+
+/**
+ * Rename a catalog entry and fan the new name out to every meal that uses it
+ * (spec §3 accepts this cost at household scale). `meals` is the store's live list,
+ * so no read is needed. Batches cap at 500 writes; a household library will never
+ * get there, but chunking costs nothing.
+ */
+export async function renameIngredient(hid: string, ingredientId: string, name: string, meals: Meal[]): Promise<void> {
+  const uses = (i: { ingredientId: string }) => i.ingredientId === ingredientId
+  const affected = meals.filter((meal) => meal.ingredients.some(uses))
+  const writes: Array<(batch: WriteBatch) => void> = [
+    (batch) => batch.update(ingredientRef(hid, ingredientId), ingredientDoc(name)),
+    ...affected.map((meal) => (batch: WriteBatch) => {
+      const ingredients = meal.ingredients.map((i) => (uses(i) ? { ...i, name } : i))
+      batch.update(mealRef(hid, meal.id), { ingredients })
+    }),
+  ]
+  for (let start = 0; start < writes.length; start += 500) {
+    const batch = writeBatch(db)
+    for (const write of writes.slice(start, start + 500)) write(batch)
+    await batch.commit()
   }
 }
 

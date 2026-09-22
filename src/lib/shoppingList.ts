@@ -16,6 +16,7 @@ export interface Contribution {
 
 /** One thing to buy: an ingredient in one unit, summed across the week. */
 export interface ShoppingLine {
+  ingredientId: string
   name: string
   unit: Unit
   total: number
@@ -28,8 +29,17 @@ export function round1(n: number): number {
 }
 
 /**
- * Group by (name, unit) and sum — you can only add compatible units, so `500 g`
- * and `2 piece` of the same ingredient stay separate lines. Pure: no Firebase.
+ * The key a line is ticked under on the week plan. Ingredient id rather than name:
+ * the catalog makes "Chicken Thighs" and "chicken thighs" one id, and a rename
+ * doesn't lose the tick.
+ */
+export const lineKey = (line: Pick<ShoppingLine, 'ingredientId' | 'unit'>) => `${line.ingredientId}|${line.unit}`
+
+/**
+ * Group by (ingredient, unit) and sum — you can only add compatible units, so
+ * `500 g` and `2 piece` of the same ingredient stay separate lines. The ingredient
+ * is its catalog id (spec §5's "group by name", now that a name has one id); a
+ * hand-edited document without one falls back to the name. Pure: no Firebase.
  */
 export function buildShoppingList(slots: Slot[], meals: Meal[]): ShoppingLine[] {
   const byId = new Map(meals.map((m) => [m.id, m]))
@@ -40,10 +50,11 @@ export function buildShoppingList(slots: Slot[], meals: Meal[]): ShoppingLine[] 
     if (!meal) continue
     for (const item of meal.ingredients) {
       if (!item.name.trim()) continue
-      const key = `${item.name}|${item.unit}`
+      const ingredientId = item.ingredientId || item.name.trim().toLowerCase()
+      const key = lineKey({ ingredientId, unit: item.unit })
       let line = groups.get(key)
       if (!line) {
-        line = { name: item.name, unit: item.unit, total: 0, contributions: [] }
+        line = { ingredientId, name: item.name, unit: item.unit, total: 0, contributions: [] }
         groups.set(key, line)
       }
       line.total = round1(line.total + item.quantity)

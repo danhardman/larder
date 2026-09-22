@@ -102,10 +102,24 @@ First time through:
    invent an account. It lands on the *invite only* screen: the rules only let a
    founder create a household (§9), and nobody is one yet.
 2. `pnpm seed` — makes every auth-emulator account a founder, gives each one a
-   household, and writes the 12-meal starter library (`src/data/seedLibrary.ts`) into
-   every household that has no meals yet. Reload the app. Admin SDK against the
-   emulators only; it refuses to run if either emulator host variable points
-   anywhere else.
+   household, and writes the 12-meal starter library (`src/data/seedLibrary.ts`) plus
+   its ingredient catalog into every household that has no meals yet. Reload the app.
+   Admin SDK against the emulators only; it refuses to run if either emulator host
+   variable points anywhere else.
+
+To start a household's library over (meals, the week plans that point at them, and
+the ingredient catalog go together), with the emulators running:
+
+```sh
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 firebase firestore:delete "households/<hid>/meals" -r -f --project larder-67041
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 firebase firestore:delete "households/<hid>/weekPlans" -r -f --project larder-67041
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 firebase firestore:delete "households/<hid>/ingredients" -r -f --project larder-67041
+pnpm seed
+```
+
+Or stop the emulators, `rm -rf .emulator`, and start again from nothing. The same
+three `firestore:delete` commands without the env var (and without `-f`, so the CLI
+confirms) do it in production; the seed script refuses production by design.
 
 ### Security rules
 

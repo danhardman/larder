@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 // under test never touch it, so stub the module rather than boot the SDK in node.
 vi.mock('./firebase', () => ({ db: {} }))
 
-const { memberProfile, normaliseEmail, toHousehold, toInvite, toMeal, toPlan, toSettings } = await import('./db')
+const { memberProfile, normaliseEmail, toHousehold, toIngredient, toInvite, toMeal, toPlan, toSettings } =
+  await import('./db')
 
 describe('toPlan', () => {
   it('fills the Stage 2 fields an older document may lack', () => {
@@ -47,6 +48,21 @@ describe('toMeal', () => {
     expect(meal.archived).toBe(false)
     expect(meal.effort).toBeUndefined()
     expect(meal.ingredients).toEqual([])
+  })
+})
+
+describe('toIngredient', () => {
+  it('derives nameLower when a hand-written document lacks it', () => {
+    expect(toIngredient('i1', { name: 'Chicken Thighs' })).toEqual({
+      id: 'i1',
+      name: 'Chicken Thighs',
+      nameLower: 'chicken thighs',
+    })
+  })
+
+  it('keeps a stored nameLower and defaults a missing name to empty', () => {
+    expect(toIngredient('i1', { name: 'Rice', nameLower: 'rice' }).nameLower).toBe('rice')
+    expect(toIngredient('i2', {})).toEqual({ id: 'i2', name: '', nameLower: '' })
   })
 })
 

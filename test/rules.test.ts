@@ -404,6 +404,66 @@ describe('household subcollections', () => {
   })
 })
 
+describe('ingredients', () => {
+  const ingredient = (name: string) => ({ name, nameLower: name.toLowerCase() })
+
+  it('a member can create, update and delete a well-formed entry', async () => {
+    const db = alice()
+    const ref = doc(db, 'households', HID, 'ingredients', 'i1')
+    await assertSucceeds(setDoc(ref, ingredient('Chicken Thighs')))
+    await assertSucceeds(getDoc(ref))
+    await assertSucceeds(getDocs(collection(db, 'households', HID, 'ingredients')))
+    await assertSucceeds(updateDoc(ref, ingredient('Chicken thigh fillets')))
+    await assertSucceeds(deleteDoc(ref))
+  })
+
+  it('rejects anything but { name, nameLower } with nameLower derived from name', async () => {
+    const db = alice()
+    const ref = doc(db, 'households', HID, 'ingredients', 'i1')
+    await assertFails(setDoc(ref, { name: 'Rice' }))
+    await assertFails(setDoc(ref, { name: 'Rice', nameLower: 'Rice' }))
+    await assertFails(setDoc(ref, { name: 'Rice', nameLower: 'rice', staple: true }))
+    await assertFails(setDoc(ref, { name: '', nameLower: '' }))
+    await assertFails(setDoc(ref, { name: ' Rice', nameLower: ' rice' }))
+    await assertFails(setDoc(ref, { name: 42, nameLower: '42' }))
+    await assertFails(setDoc(ref, { name: 'x'.repeat(101), nameLower: 'x'.repeat(101) }))
+  })
+
+  it('rejects a malformed update, even from a member', async () => {
+    const db = alice()
+    const ref = doc(db, 'households', HID, 'ingredients', 'i1')
+    await assertSucceeds(setDoc(ref, ingredient('Rice')))
+    await assertFails(updateDoc(ref, { name: 'Basmati' }))
+    await assertFails(updateDoc(ref, { nameLower: 'basmati' }))
+  })
+
+  it('accepts the batches the app writes: save-with-new-ingredient and rename fan-out', async () => {
+    const db = alice()
+    const save = writeBatch(db)
+    save.set(doc(db, 'households', HID, 'ingredients', 'i1'), ingredient('Rice'))
+    save.set(doc(db, 'households', HID, 'meals', 'm2'), {
+      name: 'Egg fried rice',
+      ingredients: [{ ingredientId: 'i1', name: 'Rice', quantity: 300, unit: 'g' }],
+    })
+    await assertSucceeds(save.commit())
+
+    const rename = writeBatch(db)
+    rename.update(doc(db, 'households', HID, 'ingredients', 'i1'), ingredient('Basmati rice'))
+    rename.update(doc(db, 'households', HID, 'meals', 'm2'), {
+      ingredients: [{ ingredientId: 'i1', name: 'Basmati rice', quantity: 300, unit: 'g' }],
+    })
+    await assertSucceeds(rename.commit())
+  })
+
+  it('is closed to non-members and the unauthenticated', async () => {
+    const ref = (db: ReturnType<typeof alice>) => doc(db, 'households', HID, 'ingredients', 'i1')
+    await assertFails(getDocs(collection(bob(), 'households', HID, 'ingredients')))
+    await assertFails(setDoc(ref(bob()), ingredient('Rice')))
+    await assertFails(getDoc(ref(as(null))))
+    await assertFails(setDoc(ref(as(null)), ingredient('Rice')))
+  })
+})
+
 describe('everything else', () => {
   it('founders is closed to clients in both directions, even to a founder', async () => {
     const db = alice()

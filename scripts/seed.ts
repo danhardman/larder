@@ -9,8 +9,9 @@
  *   1. Every Auth-emulator account becomes a founder (`/founders/{email}`), since the
  *      rules only let founders create a household. Production has exactly one
  *      founder, written by hand in the console — see docs/firebase-setup.md §9.
- *   2. Every household with no meals yet gets `SEED_MEALS`. A founder with no
- *      household gets one first, so a single run of this script is enough.
+ *   2. Every household with no meals yet gets `SEED_MEALS` and the ingredient
+ *      catalog they point at. A founder with no household gets one first, so a
+ *      single run of this script is enough.
  *
  * Uses the Admin SDK, which bypasses the security rules — fine against the
  * emulator, and the reason this script refuses to run against anything else.
@@ -19,7 +20,7 @@
 import { initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
-import { SEED_MEALS } from '../src/data/seedLibrary'
+import { SEED_INGREDIENTS, SEED_MEALS } from '../src/data/seedLibrary'
 
 const FIRESTORE_EMULATOR = '127.0.0.1:8080'
 const AUTH_EMULATOR = '127.0.0.1:9099'
@@ -75,10 +76,14 @@ async function main() {
       console.log(`${household.id} (${household.get('name')}): already has meals, skipped.`)
       continue
     }
+    const ingredients = household.ref.collection('ingredients')
     const batch = db.batch()
+    for (const { id, name, nameLower } of SEED_INGREDIENTS) batch.set(ingredients.doc(id), { name, nameLower })
     for (const meal of SEED_MEALS) batch.set(meals.doc(meal.id), meal)
     await batch.commit()
-    console.log(`${household.id} (${household.get('name')}): wrote ${SEED_MEALS.length} meals.`)
+    console.log(
+      `${household.id} (${household.get('name')}): wrote ${SEED_MEALS.length} meals and ${SEED_INGREDIENTS.length} ingredients.`,
+    )
   }
 }
 

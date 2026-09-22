@@ -14,6 +14,7 @@ export const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
 export const UNITS: Unit[] = ['g', 'kg', 'ml', 'l', 'piece', 'pack', 'tin', 'bunch', 'other']
 
 export interface MealIngredient {
+  /** The `/ingredients/{id}` catalog doc. Empty only transiently, for an unsaved editor row. */
   ingredientId: string
   /** Denormalised copy of the catalog name, so a meal renders in one read. */
   name: string
@@ -33,7 +34,11 @@ export interface Meal {
   archived: boolean
 }
 
-/** Catalog entry. Not used yet — Stage 4 replaces the name-derived ids with real docs. */
+/**
+ * Catalog entry at `/households/{hid}/ingredients/{id}` (spec §3). Exists to power
+ * autocomplete and case-insensitive uniqueness: `nameLower` is the identity, `name`
+ * the spelling shown everywhere and copied onto meals.
+ */
 export interface Ingredient {
   id: string
   name: string

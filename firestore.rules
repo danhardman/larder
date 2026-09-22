@@ -109,13 +109,34 @@ service cloud.firestore {
 
       allow delete: if false;
 
-      // meals, weekPlans, ingredients: one extra document read per evaluation for
-      // the membership lookup, accepted at household scale (spec §3).
+      // The ingredient catalog (spec §3): exactly `{ name, nameLower }`, with
+      // `nameLower` derived from `name` so the client's uniqueness check and
+      // autocomplete can trust it. Uniqueness itself can't be enforced here — rules
+      // can't query — so it's the client's job against the in-memory catalog.
+      match /ingredients/{ingredientId} {
+        function validIngredient(d) {
+          return d.keys().hasOnly(['name', 'nameLower'])
+            && d.keys().hasAll(['name', 'nameLower'])
+            && d.name is string
+            && d.name.size() > 0
+            && d.name.size() <= 100
+            && d.name == d.name.trim()
+            && d.nameLower == d.name.lower();
+        }
+
+        allow read, delete: if isMember(hid);
+        allow create, update: if isMember(hid) && validIngredient(request.resource.data);
+      }
+
+      // meals, weekPlans: one extra document read per evaluation for the membership
+      // lookup, accepted at household scale (spec §3).
       // `{collection}` is a single-segment wildcard on purpose: in rules v2 a bare
       // `{document=**}` here also matches zero segments — the household doc itself —
       // and would let a member delete it or drop their own membership.
+      // Overlapping matches are OR'd, so `ingredients` is excluded explicitly or this
+      // block would wave through the malformed docs the one above rejects.
       match /{collection}/{document=**} {
-        allow read, write: if isMember(hid);
+        allow read, write: if isMember(hid) && collection != 'ingredients';
       }
     }
 

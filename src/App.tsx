@@ -180,6 +180,7 @@ export default function App() {
           <MealEditor
             meal={library.editing.meal}
             catalog={library.catalog}
+            usageOf={library.usageOf}
             warning={library.editorWarning}
             used={library.editorMealInUse}
             onCancel={library.closeEditor}
@@ -187,6 +188,7 @@ export default function App() {
             onRestore={library.restoreMeal}
             onDelete={library.requestDelete}
             onSave={library.saveMeal}
+            onRenameIngredient={library.renameIngredient}
           />
         )}
 

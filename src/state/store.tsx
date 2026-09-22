@@ -20,12 +20,23 @@ import { generatePlan } from '../lib/generatePlan'
 import { newId } from '../lib/ids'
 import { randomSeed } from '../lib/rng'
 import { mealsInUse, statsByMeal, type MealStats } from '../lib/stats'
-import { DEFAULT_SETTINGS, type Household, type Meal, type Settings, type Slot, type WeekPlan } from '../types'
+import {
+  DEFAULT_SETTINGS,
+  type Household,
+  type Ingredient,
+  type Meal,
+  type Settings,
+  type Slot,
+  type WeekPlan,
+} from '../types'
+import { describeError } from './errors'
 import { useMemberHouseholdId } from './household'
 import {
+  commitMeal,
   householdRef,
   mealRef,
   mealsCol,
+  renameIngredient as renameIngredientDoc,
   toHousehold,
   toMeal,
   toPlan,
@@ -41,7 +52,7 @@ export interface LarderStore {
   plans: Record<string, WeekPlan>
   plansList: WeekPlan[]
   settings: Settings
-  /** Shopping-list ticks, keyed by weekStart then `name|unit`. */
+  /** Shopping-list ticks, keyed by weekStart then `ingredientId|unit` (`lineKey`). */
   ticked: Record<string, Record<string, boolean>>
   stats: Map<string, MealStats>
   /** Meals a plan still points at — archivable, but not safe to delete outright. */
@@ -56,7 +67,10 @@ export interface LarderStore {
   acceptWeek: (weekStart: string) => void
   reopenWeek: (weekStart: string) => void
   patchSlot: (weekStart: string, index: number, changes: Partial<Slot>) => void
-  saveMeal: (meal: Meal) => void
+  /** `created` are catalog entries this save introduces; they land in the same batch. */
+  saveMeal: (meal: Meal, created?: Ingredient[]) => void
+  /** Rename a catalog entry everywhere it's used — every meal carrying the id. */
+  renameIngredient: (ingredientId: string, name: string) => void
   setMealArchived: (mealId: string, archived: boolean) => void
   deleteMeal: (mealId: string) => void
   toggleTick: (weekStart: string, key: string) => void
@@ -64,11 +78,6 @@ export interface LarderStore {
 }
 
 const StoreContext = createContext<LarderStore | null>(null)
-
-const describe = (err: unknown): string => {
-  const e = err as { code?: string; message?: string }
-  return e?.code ? `${e.code}: ${e.message ?? ''}` : String(err)
-}
 
 export function LarderProvider({ children }: { children: ReactNode }) {
   // Resolved by `HouseholdProvider`; the gate above guarantees membership here.
@@ -79,7 +88,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
   const [plans, setPlans] = useState<Record<string, WeekPlan> | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const fail = useCallback((err: unknown) => setError(describe(err)), [])
+  const fail = useCallback((err: unknown) => setError(describeError(err)), [])
 
   // Three live subscriptions. `ready` below waits for the first delivery of each,
   // so no screen ever renders a half-loaded household as if it were empty.
@@ -186,10 +195,17 @@ export function LarderProvider({ children }: { children: ReactNode }) {
   )
 
   const saveMeal = useCallback(
-    (meal: Meal) => {
-      setDoc(mealRef(hid, meal.id), meal).catch(fail)
+    (meal: Meal, created: Ingredient[] = []) => {
+      commitMeal(hid, meal, created).catch(fail)
     },
     [hid, fail],
+  )
+
+  const renameIngredient = useCallback(
+    (ingredientId: string, name: string) => {
+      renameIngredientDoc(hid, ingredientId, name, meals ?? []).catch(fail)
+    },
+    [hid, meals, fail],
   )
 
   const setMealArchived = useCallback(
@@ -215,7 +231,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
     (weekStart: string, key: string) => {
       const plan = plans?.[weekStart]
       if (!plan) return
-      // A FieldPath rather than a dotted string: ingredient names can contain `.`.
+      // A FieldPath rather than a dotted string, so the key's form never matters.
       const on = !plan.ticked[key]
       updateDoc(weekPlanRef(hid, weekStart), new FieldPath('ticked', key), on ? true : deleteField()).catch(fail)
     },
@@ -248,6 +264,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
     reopenWeek,
     patchSlot,
     saveMeal,
+    renameIngredient,
     setMealArchived,
     deleteMeal,
     toggleTick,

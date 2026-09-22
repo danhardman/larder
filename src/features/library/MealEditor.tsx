@@ -8,6 +8,7 @@ import {
   SEASONS,
   UNITS,
   type CarbBase,
+  type Ingredient,
   type Meal,
   type MealIngredient,
   type MealType,
@@ -16,23 +17,40 @@ import {
   type Unit,
 } from '../../types'
 import { ArchiveIcon, ArrowLeftIcon, MinusIcon, PlusIcon, TrashIcon, UndoIcon } from '../../components/icons'
+import { resolveIngredients } from './resolveIngredients'
 
 interface MealEditorProps {
   meal: Meal | null
-  /** Ingredient names already used across the library, most common first. */
-  catalog: string[]
+  /** The household's ingredient catalog, most used first; null until it has loaded. */
+  catalog: Ingredient[] | null
+  /** How many meals use a catalog entry — for the rename prompt. */
+  usageOf: (ingredientId: string) => number
   warning: string | null
   /** True when a plan still points at this meal, which rules out deleting it. */
   used: boolean
-  onSave: (meal: Meal) => void
+  /** `created` are the catalog entries this meal introduces. */
+  onSave: (meal: Meal, created: Ingredient[]) => void
+  onRenameIngredient: (ingredientId: string, name: string) => void
   onCancel: () => void
   onArchive: (meal: Meal) => void
   onRestore: (meal: Meal) => void
   onDelete: (meal: Meal) => void
 }
 
-function blankIngredient(name = '', quantity = 1, unit: Unit = 'g'): MealIngredient {
-  return { ingredientId: name.toLowerCase() || newId(), name, quantity, unit }
+/** A row starts unresolved; `resolveIngredients` finds or creates its catalog entry on save. */
+function blankIngredient(entry?: Ingredient, quantity = 1, unit: Unit = 'g'): MealIngredient {
+  return { ingredientId: entry?.id ?? '', name: entry?.name ?? '', quantity, unit }
+}
+
+/**
+ * The catalog entry a row was loaded with, when the name typed no longer matches
+ * it — the moment to ask whether that's a rename or a different ingredient.
+ */
+function renamedFrom(row: MealIngredient, catalog: Ingredient[] | null): Ingredient | undefined {
+  if (!row.ingredientId || !catalog) return undefined
+  const entry = catalog.find((i) => i.id === row.ingredientId)
+  const typed = row.name.trim().toLowerCase()
+  return entry && typed && typed !== entry.nameLower ? entry : undefined
 }
 
 function chipClass(on: boolean): string {
@@ -46,9 +64,11 @@ const LABEL = 'text-[12px] font-bold tracking-[0.04em] uppercase text-neutral-60
 export function MealEditor({
   meal,
   catalog,
+  usageOf,
   warning,
   used,
   onSave,
+  onRenameIngredient,
   onCancel,
   onArchive,
   onRestore,
@@ -65,9 +85,12 @@ export function MealEditor({
   const [error, setError] = useState<string | null>(null)
 
   const suggestions = useMemo(() => {
-    const used = new Set(rows.map((r) => r.name.trim().toLowerCase()).filter(Boolean))
-    return catalog.filter((n) => !used.has(n.toLowerCase())).slice(0, 6)
+    const usedIds = new Set(rows.map((r) => r.ingredientId))
+    const usedNames = new Set(rows.map((r) => r.name.trim().toLowerCase()).filter(Boolean))
+    return (catalog ?? []).filter((i) => !usedIds.has(i.id) && !usedNames.has(i.nameLower)).slice(0, 6)
   }, [catalog, rows])
+
+  const pendingRenames = rows.some((row) => renamedFrom(row, catalog))
 
   const toggle = <T,>(list: T[], value: T): T[] =>
     list.includes(value) ? list.filter((v) => v !== value) : [...list, value]
@@ -83,25 +106,26 @@ export function MealEditor({
       setError('Give it a name first.')
       return
     }
-    const ingredients = rows
-      .filter((row) => row.name.trim())
-      .map((row) => ({
-        ...row,
-        name: row.name.trim(),
-        ingredientId: row.ingredientId || row.name.trim().toLowerCase(),
-        quantity: Number(row.quantity) || 0,
-      }))
-    onSave({
-      id: meal?.id ?? newId(),
-      name: trimmed,
-      mealTypes: mealTypes.length ? mealTypes : ['dinner'],
-      protein,
-      carbBase,
-      seasons: seasons.length ? seasons : SEASONS.slice(),
-      ingredients,
-      effort: meal?.effort,
-      archived: meal?.archived ?? false,
-    })
+    if (!catalog) return
+    if (pendingRenames) {
+      setError('Decide what to do with the renamed ingredient first.')
+      return
+    }
+    const { ingredients, created } = resolveIngredients(rows, catalog)
+    onSave(
+      {
+        id: meal?.id ?? newId(),
+        name: trimmed,
+        mealTypes: mealTypes.length ? mealTypes : ['dinner'],
+        protein,
+        carbBase,
+        seasons: seasons.length ? seasons : SEASONS.slice(),
+        ingredients,
+        effort: meal?.effort,
+        archived: meal?.archived ?? false,
+      },
+      created,
+    )
   }
 
   return (
@@ -228,7 +252,7 @@ export function MealEditor({
           <div className="mt-3 flex flex-wrap gap-[6px]">
             {suggestions.map((suggestion) => (
               <button
-                key={suggestion}
+                key={suggestion.id}
                 type="button"
                 onClick={() =>
                   setRows((prev) => [
@@ -239,14 +263,17 @@ export function MealEditor({
                 className="flex cursor-pointer items-center gap-[5px] rounded-full border-[1.5px] border-dashed border-sage-400 bg-sage-100 px-3 py-[7px] text-[12px] font-semibold text-sage-800 hover:border-solid hover:bg-sage-200"
               >
                 <PlusIcon size={11} strokeWidth={3.4} />
-                {suggestion}
+                {suggestion.name}
               </button>
             ))}
           </div>
         )}
 
         <div className="mt-3 flex flex-col gap-2">
-          {rows.map((row, index) => (
+          {rows.map((row, index) => {
+            const renamed = renamedFrom(row, catalog)
+            const uses = renamed ? usageOf(renamed.id) : 0
+            return (
             <div
               key={index}
               className="rounded-md border-[1.5px] border-neutral-200 bg-neutral-100 px-[11px] py-[10px]"
@@ -316,8 +343,32 @@ export function MealEditor({
                   ))}
                 </select>
               </div>
+              {renamed && (
+                <div className="mt-2 rounded-[10px] border-[1.5px] border-accent-300 bg-accent-100 px-[11px] py-[9px] text-[12px] leading-[1.45] text-accent-800">
+                  <div className="font-semibold">
+                    This was “{renamed.name}”, used in {uses} {uses === 1 ? 'meal' : 'meals'}.
+                  </div>
+                  <div className="mt-[7px] flex flex-wrap gap-[7px]">
+                    <button
+                      type="button"
+                      onClick={() => onRenameIngredient(renamed.id, row.name)}
+                      className="btn btn-secondary px-3 py-[7px] text-[12px] font-semibold"
+                    >
+                      Rename everywhere
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => patchRow(index, { ingredientId: '' })}
+                      className="btn btn-ghost px-3 py-[7px] text-[12px] font-semibold"
+                    >
+                      Use a different ingredient
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
+            )
+          })}
         </div>
 
         <button
@@ -368,14 +419,19 @@ export function MealEditor({
         <button type="button" className="btn btn-ghost flex-none px-[18px] py-3 font-semibold" onClick={onCancel}>
           Cancel
         </button>
-        <button type="button" className="btn btn-primary flex-1 py-3 text-[15px] font-bold" onClick={save}>
+        <button
+          type="button"
+          className="btn btn-primary flex-1 py-3 text-[15px] font-bold"
+          disabled={catalog === null}
+          onClick={save}
+        >
           {meal ? 'Save changes' : 'Add to larder'}
         </button>
       </div>
 
       <datalist id="larder-ingredients">
-        {catalog.map((n) => (
-          <option key={n} value={n} />
+        {(catalog ?? []).map((i) => (
+          <option key={i.id} value={i.name} />
         ))}
       </datalist>
     </div>

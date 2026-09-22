@@ -281,7 +281,7 @@ Settings, have them install and sign in → Join.
 
 ---
 
-## Stage 4 — Real ingredient catalog
+## Stage 4 — Real ingredient catalog ✅ done
 
 Spec §3. Today `ingredientId` is faked as `name.toLowerCase()` (`blankIngredient` and the save path in `src/features/library/MealEditor.tsx`)
 and the autocomplete list is derived on the fly from meal names (`src/features/library/ingredientCatalog.ts`). The `Ingredient`
@@ -299,6 +299,22 @@ never sum.
 
 **Review:** add "Chicken Thighs" to one meal and "chicken thighs" to another; the shopping list must show
 one summed line.
+
+**My work:** per-household catalog at `/households/{hid}/ingredients/{uuid}` with `{ name, nameLower }`,
+validated by an explicit rules block (the subcollection wildcard now excludes `ingredients`, since
+overlapping matches are OR'd). The catalog is subscribed **lazily** — `useIngredientCatalog` in
+`src/state/ingredients.ts` runs only while the meal editor is open and never gates the store's `ready` —
+because only the editor needs it; the shopping list reads the names copied onto meals. Autocomplete and
+uniqueness are in-memory: `resolveIngredients` (pure, tested) maps each row to an existing entry by
+`nameLower`, taking that entry's spelling, or mints a new one, and `commitMeal` writes the new entries and
+the meal in one batch. No prefix query — at household scale the whole catalog is a few KB and a listener
+on it is cheaper than a query per keystroke. Rename lives in the editor: changing a resolved row's name
+offers *Rename everywhere* (`renameIngredient` fans out over the in-memory meals in ≤500-write batches; a
+clash with another entry is refused) or *Use a different ingredient*. The shopping list and the tick key
+now group on `ingredientId|unit` via `lineKey`, so a rename keeps its tick. The seed writes the catalog
+alongside the meals with deterministic `i-<slug>` ids. Existing meals were test data and were cleared
+rather than migrated. Rules can't enforce uniqueness across random ids, so two devices inventing the same
+name offline can both create it — accepted at household scale and noted in `db.ts`.
 
 ---
 
@@ -379,7 +395,7 @@ Lowest-value items, batched last so you can stop before them without losing anyt
 
 ```
 Stage 0 (spike) ─┬─> Stage 2 (Firestore) ──> Stage 3 (auth) ✅ ─> Stage 5 (settings) ─┐
-                 │                       └──> Stage 4 (ingredients) ─────────────────┤
+                 │                       └──> Stage 4 (ingredients) ✅ ──────────────┤
 Stage 1 (fixes) ─┘                                                                   ├──> Stage 8
                                             Stage 6 (insights) ─────────────────────┤
                                             Stage 7 (polish) ───────────────────────┘

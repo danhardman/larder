@@ -1,4 +1,4 @@
-import { formatContribution, round1, type ShoppingLine } from '../../lib/shoppingList'
+import { formatContribution, lineKey, round1, type ShoppingLine } from '../../lib/shoppingList'
 import { CopyIcon } from '../../components/icons'
 
 interface ShoppingScreenProps {
@@ -47,7 +47,7 @@ export function ShoppingScreen({
       {ready && (
         <div className="flex flex-col gap-[2px] px-5 pt-4">
           {lines.map((line) => {
-            const key = `${line.name}|${line.unit}`
+            const key = lineKey(line)
             const on = !!ticked[key]
             return (
               <button

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { Meal } from '../../types'
-import { ingredientCatalog } from './ingredientCatalog'
+import type { Ingredient, Meal } from '../../types'
+import { rankIngredients, usageCount } from './ingredientCatalog'
 
-function meal(id: string, names: string[]): Meal {
+function meal(id: string, ids: string[], archived = false): Meal {
   return {
     id,
     name: id,
@@ -10,24 +10,45 @@ function meal(id: string, names: string[]): Meal {
     protein: 'none',
     carbBase: 'none',
     seasons: ['summer'],
-    ingredients: names.map((name) => ({ ingredientId: name, name, quantity: 1, unit: 'g' })),
-    archived: false,
+    ingredients: ids.map((ingredientId) => ({ ingredientId, name: ingredientId, quantity: 1, unit: 'g' })),
+    archived,
   }
 }
 
-describe('ingredientCatalog', () => {
-  it('lists each name once, most-used first', () => {
-    const catalog = ingredientCatalog([
+const entry = (id: string, name = id): Ingredient => ({ id, name, nameLower: name.toLowerCase() })
+
+const catalog = [entry('rice'), entry('garlic'), entry('onion'), entry('saffron')]
+
+describe('rankIngredients', () => {
+  it('orders most-used first, then alphabetically, unused last', () => {
+    const ranked = rankIngredients(catalog, [
       meal('a', ['onion', 'rice']),
       meal('b', ['onion', 'garlic']),
       meal('c', ['onion', 'garlic', 'rice']),
     ])
-    expect(catalog[0]).toBe('onion')
-    expect(catalog).toHaveLength(3)
-    expect(new Set(catalog)).toEqual(new Set(['onion', 'garlic', 'rice']))
+    expect(ranked.map((i) => i.id)).toEqual(['onion', 'garlic', 'rice', 'saffron'])
   })
 
-  it('ignores blank names', () => {
-    expect(ingredientCatalog([meal('a', ['', 'salt'])])).toEqual(['salt'])
+  it('counts a meal once however many rows use the same ingredient', () => {
+    const ranked = rankIngredients([entry('rice'), entry('garlic')], [
+      meal('a', ['rice', 'rice']),
+      meal('b', ['garlic']),
+      meal('c', ['garlic']),
+    ])
+    expect(ranked.map((i) => i.id)).toEqual(['garlic', 'rice'])
+  })
+
+  it('does not mutate the catalog it was given', () => {
+    const input = [entry('b'), entry('a')]
+    rankIngredients(input, [])
+    expect(input.map((i) => i.id)).toEqual(['b', 'a'])
+  })
+})
+
+describe('usageCount', () => {
+  it('counts meals, including archived ones', () => {
+    const meals = [meal('a', ['rice']), meal('b', ['rice', 'garlic'], true), meal('c', ['garlic'])]
+    expect(usageCount('rice', meals)).toBe(2)
+    expect(usageCount('saffron', meals)).toBe(0)
   })
 })
