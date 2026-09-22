@@ -1,12 +1,20 @@
 import { formatContribution, lineKey, round1, type ShoppingLine } from '../../lib/shoppingList'
+import { ChipRow, type ChipOption } from '../../components/ChipRow'
 import { CopyIcon } from '../../components/icons'
 
 interface ShoppingScreenProps {
   /** Null when no week has been accepted yet. */
   lines: ShoppingLine[] | null
   weekLabel: string
+  /** Every accepted week in the strip; the picker only shows when there's a choice. */
+  weekOptions: ChipOption<string>[]
+  selectedIso: string
+  onSelectWeek: (iso: string) => void
   ticked: Record<string, boolean>
   copied: boolean
+  /** Whether each line shows its per-meal breakdown (spec §5's summed ↔ expanded). */
+  expanded: boolean
+  onToggleExpanded: () => void
   emptyNote: string
   onToggle: (key: string) => void
   onCopy: () => void
@@ -16,8 +24,13 @@ interface ShoppingScreenProps {
 export function ShoppingScreen({
   lines,
   weekLabel,
+  weekOptions,
+  selectedIso,
+  onSelectWeek,
   ticked,
   copied,
+  expanded,
+  onToggleExpanded,
   emptyNote,
   onToggle,
   onCopy,
@@ -32,15 +45,34 @@ export function ShoppingScreen({
         <div className="mt-[7px] text-[13px] font-medium text-neutral-600">
           {ready ? `${weekLabel} · ${lines.length} lines` : 'Nothing to buy yet'}
         </div>
+        {weekOptions.length > 1 && (
+          <ChipRow
+            label="Week"
+            labelClass="hidden"
+            options={weekOptions}
+            value={selectedIso}
+            onChange={onSelectWeek}
+          />
+        )}
         {ready && (
-          <button
-            type="button"
-            onClick={onCopy}
-            className="btn btn-primary mt-[14px] w-full gap-2 font-bold"
-          >
-            <CopyIcon size={16} />
-            {copied ? 'Copied' : 'Copy the whole list'}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onCopy}
+              className="btn btn-primary mt-[14px] w-full gap-2 font-bold"
+            >
+              <CopyIcon size={16} />
+              {copied ? 'Copied' : 'Copy the whole list'}
+            </button>
+            <button
+              type="button"
+              aria-pressed={expanded}
+              onClick={onToggleExpanded}
+              className="mt-[10px] cursor-pointer border-0 bg-transparent p-0 text-[12.5px] font-bold text-accent-700 underline underline-offset-2"
+            >
+              {expanded ? 'Hide the breakdown' : 'Show the breakdown'}
+            </button>
+          </>
         )}
       </div>
 
@@ -83,9 +115,11 @@ export function ShoppingScreen({
                   >
                     {round1(line.total)} {line.unit} — {line.name}
                   </span>
-                  <span className="mt-[3px] block text-[11.5px] leading-[1.4] text-neutral-600">
-                    ↳ {line.contributions.map((c) => formatContribution(c, line.unit)).join(' + ')}
-                  </span>
+                  {expanded && (
+                    <span className="mt-[3px] block text-[11.5px] leading-[1.4] text-neutral-600">
+                      ↳ {line.contributions.map((c) => formatContribution(c, line.unit)).join(' + ')}
+                    </span>
+                  )}
                 </span>
               </button>
             )

@@ -3,11 +3,13 @@ import { newId } from '../../lib/ids'
 import { round1 } from '../../lib/shoppingList'
 import {
   CARB_BASES,
+  EFFORTS,
   MEAL_TYPES,
   PROTEINS,
   SEASONS,
   UNITS,
   type CarbBase,
+  type Effort,
   type Ingredient,
   type Meal,
   type MealIngredient,
@@ -16,6 +18,7 @@ import {
   type Season,
   type Unit,
 } from '../../types'
+import { ChipRow } from '../../components/ChipRow'
 import { ArchiveIcon, ArrowLeftIcon, MinusIcon, PlusIcon, TrashIcon, UndoIcon } from '../../components/icons'
 import { resolveIngredients } from './resolveIngredients'
 
@@ -61,6 +64,11 @@ function chipClass(on: boolean): string {
 
 const LABEL = 'text-[12px] font-bold tracking-[0.04em] uppercase text-neutral-600'
 
+const EFFORT_OPTIONS = EFFORTS.map((effort) => ({
+  value: effort,
+  label: effort[0].toUpperCase() + effort.slice(1),
+}))
+
 export function MealEditor({
   meal,
   catalog,
@@ -79,6 +87,7 @@ export function MealEditor({
   const [protein, setProtein] = useState<Protein>(meal?.protein ?? 'chicken')
   const [carbBase, setCarbBase] = useState<CarbBase>(meal?.carbBase ?? 'none')
   const [seasons, setSeasons] = useState<Season[]>(meal?.seasons ?? SEASONS.slice())
+  const [effort, setEffort] = useState<Effort>(meal?.effort ?? 'normal')
   const [rows, setRows] = useState<MealIngredient[]>(
     meal?.ingredients.length ? meal.ingredients.map((i) => ({ ...i })) : [blankIngredient()],
   )
@@ -121,7 +130,7 @@ export function MealEditor({
         carbBase,
         seasons: seasons.length ? seasons : SEASONS.slice(),
         ingredients,
-        effort: meal?.effort,
+        effort,
         archived: meal?.archived ?? false,
       },
       created,
@@ -216,7 +225,7 @@ export function MealEditor({
           </div>
         </div>
 
-        <div className="mb-5">
+        <div className="mb-3">
           <div className={`${LABEL} mb-2`}>Seasons</div>
           <div className="flex gap-[6px]">
             {SEASONS.map((season) => (
@@ -233,6 +242,17 @@ export function MealEditor({
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mb-[10px]">
+          <ChipRow
+            label="Effort"
+            labelClass={LABEL}
+            hint="Quick meals lean toward weekdays, involved ones toward the weekend."
+            options={EFFORT_OPTIONS}
+            value={effort}
+            onChange={setEffort}
+          />
         </div>
 
         <div className="mb-[18px] h-px bg-divider" />

@@ -56,8 +56,26 @@ interface Tally {
   prevProtein: string | null
 }
 
-/** Soft constraints — dinners only. Higher is better. */
-export function scoreDinner(meal: Meal, tally: Tally, recent: Set<string>, jitter: number): number {
+/** Saturday and Sunday. Slot days are Monday-first (`Slot.day`, `src/types/plan.ts`). */
+export const isWeekendDay = (day: number) => day >= 5
+
+/**
+ * Soft constraints — dinners only. Higher is better.
+ *
+ * The numbers here are the whole policy, so they're chosen relative to each other:
+ * repeats cost 3, yesterday's protein 1.5, and the jitter is up to 0.6. The effort
+ * tilt is ±0.75 — a 1.5 spread between `quick` and `involved`, on a par with the
+ * prev-protein penalty and half a repeat. Variety still decides the week; effort
+ * only breaks ties. A meal with no effort set scores neutrally, so the tilt does
+ * nothing until a library has been classified.
+ */
+export function scoreDinner(
+  meal: Meal,
+  tally: Tally,
+  recent: Set<string>,
+  jitter: number,
+  isWeekend: boolean,
+): number {
   let score = jitter
   const protein = tally.proteins[meal.protein] ?? 0
   const carb = tally.carbs[meal.carbBase] ?? 0
@@ -66,6 +84,9 @@ export function scoreDinner(meal: Meal, tally: Tally, recent: Set<string>, jitte
   if (carb >= 2) score -= 3 * (carb - 1)
   if (tally.prevProtein && tally.prevProtein === meal.protein) score -= 1.5
   if (recent.has(meal.id)) score -= 2.5
+  const effort = meal.effort ?? 'normal'
+  if (effort === 'quick') score += isWeekend ? -0.75 : 0.75
+  if (effort === 'involved') score += isWeekend ? 0.75 : -0.75
   return score
 }
 
@@ -134,7 +155,7 @@ export function generatePlan(input: GenerateInput): GenerateResult {
     const lockedMeal = locked?.mealId ? (byId.get(locked.mealId) ?? null) : null
     const meal = locked
       ? lockedMeal
-      : pickDinner(dinnerPool, usedDinners, usedByDay[day], tally, recent, rng)
+      : pickDinner(dinnerPool, usedDinners, usedByDay[day], tally, recent, rng, isWeekendDay(day))
     if (!locked && !meal) thin.add('dinners')
     if (meal) {
       usedDinners.add(meal.id)
@@ -191,12 +212,13 @@ function pickDinner(
   tally: Tally,
   recent: Set<string>,
   rng: Rng,
+  isWeekend: boolean,
 ): Meal | null {
   let best: Meal | null = null
   let bestScore = -Infinity
   for (const meal of pool) {
     if (used.has(meal.id) || usedToday.has(meal.id)) continue
-    const score = scoreDinner(meal, tally, recent, rng() * 0.6)
+    const score = scoreDinner(meal, tally, recent, rng() * 0.6, isWeekend)
     if (score > bestScore) {
       bestScore = score
       best = meal
@@ -211,6 +233,10 @@ function pickDinner(
 /**
  * Re-roll a single slot with the rest of the week held fixed. Dinners avoid every
  * other dinner in the week; breakfast/lunch just avoid what's already there.
+ *
+ * Deliberately unscored — no variety weighting, no effort tilt. A re-roll means
+ * "give me something else", and scoring would make repeated taps converge on the
+ * same best answer instead of moving on.
  */
 export function rerollSlot(
   slots: Slot[],

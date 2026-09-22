@@ -318,7 +318,7 @@ name offline can both create it — accepted at household scale and noted in `db
 
 ---
 
-## Stage 5 — Settings controls
+## Stage 5 — Settings controls ✅ done
 
 Spec §6. `recencyWindowWeeks` and `rotationSize` are already plumbed end-to-end into the generator, and
 `updateSettings` exists in `src/state/store.tsx` but **is never called by anything**. Mostly a form.
@@ -349,7 +349,7 @@ the *capture* is already in place, not because it will read well immediately.
 
 ---
 
-## Stage 7 — Remaining M3 polish
+## Stage 7 — Remaining M3 polish ✅ done
 
 Lowest-value items, batched last so you can stop before them without losing anything.
 
@@ -362,6 +362,56 @@ Lowest-value items, batched last so you can stop before them without losing anyt
   (`src/features/shopping/useShopping.ts`).
 - **PWA raster icons.** `vite.config.ts` ships only `favicon.svg`; iOS home-screen install wants PNGs
   (192/512 + apple-touch-icon).
+
+### Outcome
+
+All four done. 81 tests across 10 files, `tsc -b` and `oxlint` clean.
+
+- **Effort** — `EFFORTS` joins the other const arrays in `src/types/meal.ts`, and the meal editor gets
+  an **Effort** row (Quick / Normal / Involved) under Seasons. It reuses `ChipRow`
+  (`src/components/ChipRow.tsx`) rather than a fourth copy of the inline chip markup; the one addition
+  is an optional `labelClass`, because the editor's labels are uppercase and a mid-form typography
+  change reads as a bug. `save()` now writes the state instead of passing `meal?.effort` through, so
+  every saved meal carries an explicit value; `effort` stays optional for meals saved before this.
+- **The tilt** — `scoreDinner` takes `isWeekend` (`isWeekendDay`, day ≥ 5; `Slot.day` is Monday-first)
+  and applies ±0.75, a 1.5 spread between `quick` and `involved`. That's the same magnitude as the
+  same-protein-yesterday penalty and half a repeat penalty, so **variety still decides and effort only
+  breaks ties** — there's a test for exactly that. An unset effort scores as `normal`, so an
+  unclassified library generates identically to before.
+
+  Measured over 200 seeds with the 12-meal seed library split half quick / half involved: involved
+  dinners land on a weekend **66.7%** of the time against a 0.286 neutral baseline, and weekdays come
+  out ~80% quick. Worth knowing it is not subtle in practice: because the pick is a greedy argmax and
+  the jitter tops out at 0.6, a weekend slot with an otherwise-equal field will always take the
+  involved meal. That is the intended reading of "weight involved toward weekends"; the tie-break
+  framing is about what happens when effort and variety disagree.
+- **Re-roll stays unweighted.** `rerollSlot` still picks uniformly at random — no variety scoring, no
+  effort tilt, and now a comment saying so. A re-roll means "give me something else"; scoring it would
+  make repeated taps converge on the same best answer instead of moving on.
+- **Summed ↔ expanded** — the breakdown is now behind a *Show the breakdown* toggle and **summed is the
+  default**; the per-line `↳` was permanently inline before. It's one global toggle rather than a
+  per-line affordance because each line is already a single tick target and a second hit area inside it
+  would fight the tick. `formatShoppingList` takes `expanded` too, so the clipboard matches what's on
+  screen (summed lines run together, expanded ones keep the blank line between breakdowns).
+- **Any accepted week** — the shopping screen gets a chip row of every accepted week in the strip,
+  shown only when there's more than one. `useShopping` holds a *picked ISO override* rather than the
+  chosen week itself, resolving picked → next accepted → this accepted → none: accepting a new week
+  still re-defaults to it, and reopening the week you were looking at falls back instead of stranding
+  the screen on a plan with no list. Ticks follow the week (`store.ticked[week.iso]`) and so switch with it.
+- **Icons** — `scripts/icons.sh` rasterises `public/favicon.svg` into `icon-192`, `icon-512`,
+  `icon-maskable-512` (full-bleed, mark at 80% for Android's circular crop) and `apple-touch-icon`
+  (180×180, square and opaque — iOS applies its own rounding and renders transparency black). The
+  script strips the source's rounded background rect rather than restating the paths, so the pot stays
+  defined in one place; the PNGs are committed and it only reruns when the mark changes (needs
+  `librsvg`). `vite.config.ts` lists the three manifest icons and `includeAssets` the Apple one, which
+  is referenced from `index.html` and so wouldn't otherwise be precached. Build confirms 10 precache
+  entries and all four PNGs in `dist/`.
+- **Not done:** the effort tilt doesn't reach breakfast or lunch. They're a cycled rotation, not a
+  per-day choice, so there's no slot to weight.
+
+**Still to do by hand:** nothing server-side — no rules change, so no `firebase deploy`. The phone
+check is the only manual step: deploy, add to home screen on iOS, confirm the pot mark appears rather
+than a screenshot thumbnail.
 
 ---
 
@@ -384,7 +434,7 @@ Lowest-value items, batched last so you can stop before them without losing anyt
 
 ## Verification (every stage)
 
-- `pnpm test` and `pnpm typecheck` — both green today (43 tests, 5 files); keep them green.
+- `pnpm test` and `pnpm typecheck` — both green today (81 tests, 10 files); keep them green.
   Note `test` is `vitest` with no `run` flag, so it watches; use `pnpm vitest run` for a one-shot.
 - `pnpm lint` (oxlint).
 - `pnpm dev` alongside `pnpm emulators` from Stage 2 onward — never against production data.
@@ -399,7 +449,7 @@ Stage 0 (spike) ─┬─> Stage 2 (Firestore) ──> Stage 3 (auth) ✅ ─> S
                  │                       └──> Stage 4 (ingredients) ✅ ──────────────┤
 Stage 1 (fixes) ─┘                                                                   ├──> Stage 8
                                             Stage 6 (insights) ─────────────────────┤
-                                            Stage 7 (polish) ───────────────────────┘
+                                            Stage 7 (polish) ✅ ────────────────────┘
 ```
 
 Stage 1 is independent of Stage 0 and can run while you're in the Firebase console.

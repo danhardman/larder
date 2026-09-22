@@ -127,8 +127,13 @@ export default function App() {
             <ShoppingScreen
               lines={shopping.lines}
               weekLabel={shopping.weekLabel}
+              weekOptions={shopping.weekOptions}
+              selectedIso={shopping.selectedIso}
+              onSelectWeek={shopping.selectWeek}
               ticked={shopping.ticked}
               copied={shopping.copied}
+              expanded={shopping.expanded}
+              onToggleExpanded={shopping.toggleExpanded}
               emptyNote={shopping.emptyNote}
               onToggle={shopping.toggle}
               onCopy={shopping.copyList}

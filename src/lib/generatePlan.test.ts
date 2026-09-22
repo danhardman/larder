@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { generatePlan, eligible, rerollSlot } from './generatePlan'
+import { generatePlan, eligible, isWeekendDay, rerollSlot, scoreDinner } from './generatePlan'
 import { rngFrom } from './rng'
 import { SEED_MEALS } from '../data/seedLibrary'
-import type { Meal, Slot, WeekPlan } from '../types'
+import type { Effort, Meal, Slot, WeekPlan } from '../types'
 
 const base = {
   library: SEED_MEALS,
@@ -105,5 +105,53 @@ describe('rerollSlot', () => {
     const index = slots.findIndex((s) => s.mealType === 'dinner')
     const library = SEED_MEALS.filter((m) => m.id === slots[index].mealId)
     expect(rerollSlot(slots, index, library, 'summer', rngFrom(1))).toBeNull()
+  })
+})
+
+describe('scoreDinner', () => {
+  const emptyTally = () => ({ proteins: {}, carbs: {}, prevProtein: null })
+  const withEffort = (id: string, effort?: Effort): Meal => ({
+    id,
+    name: id,
+    mealTypes: ['dinner'],
+    protein: 'chicken',
+    carbBase: 'rice',
+    seasons: ['spring', 'summer', 'autumn', 'winter'],
+    ingredients: [],
+    effort,
+    archived: false,
+  })
+  // No jitter, so the numbers under test are the only thing moving.
+  const score = (meal: Meal, isWeekend: boolean, tally = emptyTally()) =>
+    scoreDinner(meal, tally, new Set<string>(), 0, isWeekend)
+
+  it('treats Saturday and Sunday as the weekend', () => {
+    expect([0, 1, 2, 3, 4].map(isWeekendDay)).toEqual([false, false, false, false, false])
+    expect([5, 6].map(isWeekendDay)).toEqual([true, true])
+  })
+
+  it('prefers quick over involved on a weekday', () => {
+    expect(score(withEffort('q', 'quick'), false)).toBeGreaterThan(
+      score(withEffort('i', 'involved'), false),
+    )
+  })
+
+  it('prefers involved over quick at the weekend', () => {
+    expect(score(withEffort('i', 'involved'), true)).toBeGreaterThan(
+      score(withEffort('q', 'quick'), true),
+    )
+  })
+
+  it('scores an unset effort the same as normal', () => {
+    expect(score(withEffort('u', undefined), false)).toBe(score(withEffort('n', 'normal'), false))
+    expect(score(withEffort('u', undefined), true)).toBe(score(withEffort('n', 'normal'), true))
+  })
+
+  it('lets variety outweigh the effort tilt', () => {
+    // A quick meal on a weekday, but its protein is already on the plate twice.
+    const repeated = { proteins: { chicken: 2 }, carbs: {}, prevProtein: null }
+    expect(score(withEffort('q', 'quick'), false, repeated)).toBeLessThan(
+      score(withEffort('i', 'involved'), false),
+    )
   })
 })

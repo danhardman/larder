@@ -7,21 +7,31 @@ import type { WeekView } from '../weeks/weekView'
 
 const COPIED_MS = 2600
 
+const WEEK_LABELS: Record<number, string> = { [-1]: 'Last week', 0: 'This week', 1: 'Next week' }
+
 /**
- * The shopping list for the next accepted week — next week if it's locked in,
- * otherwise this week. Nothing until a week is accepted.
+ * The shopping list for an accepted week. Defaults to the next accepted week —
+ * next week if it's locked in, otherwise this week — and lets you step back to
+ * any other accepted week in the strip. Nothing until a week is accepted.
  */
 export function useShopping(weeks: WeekView[]) {
   const store = useLarder()
   const { say } = useToast()
   const [copied, setCopied] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  // An override rather than the chosen week itself: accepting a new week still
+  // re-defaults, and reopening the week you were looking at can't strand the screen.
+  const [pickedIso, setPickedIso] = useState<string | null>(null)
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => () => clearTimeout(copiedTimer.current), [])
 
+  const accepted = weeks.filter((w) => w.plan?.status === 'accepted')
+
   const week =
-    weeks.find((w) => w.offset === 1 && w.plan?.status === 'accepted') ??
-    weeks.find((w) => w.offset === 0 && w.plan?.status === 'accepted') ??
+    accepted.find((w) => w.iso === pickedIso) ??
+    accepted.find((w) => w.offset === 1) ??
+    accepted.find((w) => w.offset === 0) ??
     null
 
   const lines = useMemo(
@@ -36,7 +46,7 @@ export function useShopping(weeks: WeekView[]) {
 
   const copyList = () => {
     if (!lines || !week) return
-    const text = formatShoppingList(lines, formatDay(week.start))
+    const text = formatShoppingList(lines, formatDay(week.start), expanded)
     navigator.clipboard?.writeText(text).catch(() => {})
     setCopied(true)
     say('Copied — go forth and shop.')
@@ -48,8 +58,13 @@ export function useShopping(weeks: WeekView[]) {
     week,
     lines,
     weekLabel: week ? formatWeekRange(week.start) : '',
+    weekOptions: accepted.map((w) => ({ value: w.iso, label: WEEK_LABELS[w.offset] ?? '' })),
+    selectedIso: week?.iso ?? '',
+    selectWeek: setPickedIso,
     ticked: week ? (store.ticked[week.iso] ?? {}) : {},
     copied,
+    expanded,
+    toggleExpanded: () => setExpanded((on) => !on),
     emptyNote,
     copyList,
     toggle: (key: string) => week && store.toggleTick(week.iso, key),

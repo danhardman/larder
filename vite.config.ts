@@ -10,6 +10,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // The Apple icon is referenced from index.html, not the manifest, so it has
+      // to be named here to get precached.
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Larder',
         short_name: 'Larder',
@@ -18,8 +21,14 @@ export default defineConfig({
         display: 'standalone',
         background_color: '#f5ead8',
         theme_color: '#f5ead8',
-        // Raster icons still to come; the SVG mark covers the browser tab.
-        icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }],
+        // `scripts/icons.sh` rasterises these from favicon.svg. The maskable one is
+        // separate because Android crops to a circle and would clip a full-bleed mark.
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+        ],
       },
     }),
   ],

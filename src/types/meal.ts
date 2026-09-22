@@ -12,6 +12,7 @@ export const PROTEINS: Protein[] = ['chicken', 'beef', 'pork', 'fish', 'veg', 'o
 export const CARB_BASES: CarbBase[] = ['pasta', 'rice', 'potato', 'bread', 'grain', 'none']
 export const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
 export const UNITS: Unit[] = ['g', 'kg', 'ml', 'l', 'piece', 'pack', 'tin', 'bunch', 'other']
+export const EFFORTS: Effort[] = ['quick', 'normal', 'involved']
 
 export interface MealIngredient {
   /** The `/ingredients/{id}` catalog doc. Empty only transiently, for an unsaved editor row. */
@@ -30,6 +31,7 @@ export interface Meal {
   carbBase: CarbBase
   seasons: Season[]
   ingredients: MealIngredient[]
+  /** Tilts dinners toward weekdays (`quick`) or weekends (`involved`). Absent on pre-Stage-7 meals. */
   effort?: Effort
   archived: boolean
 }

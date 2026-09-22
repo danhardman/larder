@@ -110,14 +110,30 @@ describe('buildShoppingList', () => {
     expect(buildShoppingList([empty], [fajitas])).toEqual([])
   })
 
-  it('formats a copyable list with the per-meal breakdown', () => {
+  it('formats a copyable list with the per-meal breakdown when expanded', () => {
     const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), slot(1, 'b', 'Katsu curry')], [
       fajitas,
       katsu,
     ])
-    const text = formatShoppingList(lines, '13 Jul')
+    const text = formatShoppingList(lines, '13 Jul', true)
     expect(text).toContain('Shopping list — w/c 13 Jul')
     expect(text).toContain('600 g — chicken thighs')
     expect(text).toContain('↳ Chicken fajitas 300 g + Katsu curry 300 g')
+  })
+
+  it('drops the breakdown when summed', () => {
+    const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), slot(1, 'b', 'Katsu curry')], [
+      fajitas,
+      katsu,
+    ])
+    const text = formatShoppingList(lines, '13 Jul', false)
+    expect(text).toContain('Shopping list — w/c 13 Jul')
+    expect(text).toContain('600 g — chicken thighs')
+    expect(text).not.toContain('↳')
+    // One line each, no blank line between them.
+    expect(text.trim().split('\n').slice(2)).toEqual([
+      '3 piece — bell peppers',
+      '600 g — chicken thighs',
+    ])
   })
 })

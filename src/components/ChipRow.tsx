@@ -14,16 +14,19 @@ export function ChipRow<T extends string | number>({
   options,
   value,
   onChange,
+  labelClass = 'text-[14px] font-bold text-text',
 }: {
   label: string
   hint?: string
   options: ChipOption<T>[]
   value: T
   onChange: (value: T) => void
+  /** Override the label typography to match the surrounding form. */
+  labelClass?: string
 }) {
   return (
     <div role="group" aria-label={label} className="py-2">
-      <p className="text-[14px] font-bold text-text">{label}</p>
+      <p className={labelClass}>{label}</p>
       {hint && <p className="mt-[2px] text-[12.5px] leading-[1.5] text-neutral-600">{hint}</p>}
       <div className="mt-2 flex gap-[7px]">
         {options.map((o) => {
