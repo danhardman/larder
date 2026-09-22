@@ -46,10 +46,10 @@ export function useShopping(weeks: WeekView[]) {
 
   const copyList = () => {
     if (!lines || !week) return
-    const text = formatShoppingList(lines, formatDay(week.start), expanded)
+    const text = formatShoppingList(lines, formatDay(week.start))
     navigator.clipboard?.writeText(text).catch(() => {})
     setCopied(true)
-    say('Copied — go forth and shop.')
+    say('Copied — paste into Notes, Select All, tap the checklist button.')
     clearTimeout(copiedTimer.current)
     copiedTimer.current = setTimeout(() => setCopied(false), COPIED_MS)
   }
