@@ -61,7 +61,7 @@ export default function App() {
   return (
     <div className="flex h-dvh justify-center overflow-hidden bg-neutral-300">
       <div className="relative flex h-dvh w-full max-w-[430px] min-h-0 flex-col overflow-hidden bg-bg shadow-[0_0_60px_rgba(46,43,37,0.18)]">
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[104px]">
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(104px+env(safe-area-inset-bottom))]">
           {screen === 'weeks' && (
             <WeeksScreen
               weeks={weeks.weeks}
@@ -160,7 +160,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => library.openEditor(null)}
-            className="btn btn-primary absolute right-[18px] bottom-[88px] z-[7] gap-2 px-5 py-[14px] text-[14.5px] font-bold shadow-lg"
+            className="btn btn-primary absolute right-[18px] bottom-[calc(88px+env(safe-area-inset-bottom))] z-[7] gap-2 px-5 py-[14px] text-[14.5px] font-bold shadow-lg"
           >
             <PlusIcon size={18} />
             New meal

@@ -8,7 +8,7 @@ interface DraftActionBarProps {
 /** Floats above the tab bar while a draft is being reviewed. */
 export function DraftActionBar({ onRedraft, onAccept }: DraftActionBarProps) {
   return (
-    <div className="absolute right-[14px] bottom-20 left-[14px] z-[7] flex gap-2">
+    <div className="absolute right-[14px] bottom-[calc(80px+env(safe-area-inset-bottom))] left-[14px] z-[7] flex gap-2">
       <button
         type="button"
         aria-label="Roll the whole week again"
