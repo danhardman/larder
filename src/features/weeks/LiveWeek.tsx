@@ -1,10 +1,10 @@
 import { ArrowRightIcon } from '../../components/icons'
 import { addDays, DAY_NAMES, formatDay, formatDayWithName, todayIndex } from '../../lib/dates'
-import type { PortionFeedback, WeekPlan } from '../../types'
+import { AWAY_SHORT, type PortionFeedback, type WeekPlan } from '../../types'
 import { DayCard } from './DayCard'
 import { PortionPrompt } from './PortionPrompt'
 import { TodaySlot } from './TodaySlot'
-import { liveTone, slotsForDay, TYPE_INITIAL, type SlotRef, type WeekView } from './weekView'
+import { liveTone, slotsForDay, tickable, TYPE_INITIAL, type SlotRef, type WeekView } from './weekView'
 
 interface LiveWeekProps {
   week: WeekView
@@ -28,7 +28,8 @@ export function LiveWeek({
 }: LiveWeekProps) {
   const plan = week.plan as WeekPlan
   const today = todayIndex(week.start)
-  const done = plan.slots.filter((s) => s.outcome !== 'pending').length
+  const expected = tickable(plan)
+  const done = expected.filter((s) => s.outcome !== 'pending').length
   const portionSlot =
     portionFor && portionFor.weekStart === week.iso ? plan.slots[portionFor.index] : null
   const restDays = Array.from({ length: 7 }, (_, d) => d).filter((d) => d !== today)
@@ -44,7 +45,7 @@ export function LiveWeek({
             </span>
           </div>
           <div className="grid grid-cols-3 gap-[9px]">
-            {slotsForDay(plan, today).map(({ slot, index }) => (
+            {slotsForDay(plan.slots, today).map(({ slot, index }) => (
               <TodaySlot
                 key={index}
                 slot={slot}
@@ -70,14 +71,14 @@ export function LiveWeek({
             {today === null ? 'The week' : 'The rest of the week'}
           </span>
           <span className="text-[11.5px] font-semibold text-neutral-500">
-            {done} of {plan.slots.length} ticked
+            {done} of {expected.length} ticked
           </span>
         </div>
         <div className="flex flex-col gap-[9px]">
           {restDays.map((d) => (
             <DayCard key={d} name={DAY_NAMES[d]} date={formatDay(addDays(week.start, d))}>
               <div className="grid grid-cols-3 gap-[7px]">
-                {slotsForDay(plan, d).map(({ slot, index }) => {
+                {slotsForDay(plan.slots, d).map(({ slot, index }) => {
                   const tone = liveTone(slot, false)
                   return (
                     <button
@@ -93,7 +94,7 @@ export function LiveWeek({
                         className={`text-[12px] leading-[1.2] font-semibold ${tone.faded ? 'opacity-45' : ''}`}
                         style={{ textWrap: 'pretty' }}
                       >
-                        {slot.mealName}
+                        {slot.away ? AWAY_SHORT[slot.away] : slot.mealName}
                       </span>
                     </button>
                   )

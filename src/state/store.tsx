@@ -16,7 +16,7 @@ import { ErrorScreen } from '../components/ErrorScreen'
 import { LoadingScreen } from '../components/LoadingScreen'
 import { fromISODate } from '../lib/dates'
 import { seasonForWeek } from '../lib/seasons'
-import { generatePlan } from '../lib/generatePlan'
+import { blankSlots, generatePlan } from '../lib/generatePlan'
 import { newId } from '../lib/ids'
 import { randomSeed } from '../lib/rng'
 import { mealsInUse, statsByMeal, type MealStats } from '../lib/stats'
@@ -26,6 +26,7 @@ import {
   type Ingredient,
   type Meal,
   type Settings,
+  type SkipReason,
   type Slot,
   type WeekPlan,
 } from '../types'
@@ -67,6 +68,7 @@ export interface LarderStore {
   acceptWeek: (weekStart: string) => void
   reopenWeek: (weekStart: string) => void
   patchSlot: (weekStart: string, index: number, changes: Partial<Slot>) => void
+  setSlotAway: (weekStart: string, index: number, away: SkipReason | null, note?: string | null) => void
   /** `created` are catalog entries this save introduces; they land in the same batch. */
   saveMeal: (meal: Meal, created?: Ingredient[]) => void
   /** Rename a catalog entry everywhere it's used — every meal carrying the id. */
@@ -194,6 +196,35 @@ export function LarderProvider({ children }: { children: ReactNode }) {
     [plans, patchPlan],
   )
 
+  const setSlotAway = useCallback(
+    (weekStart: string, index: number, away: SkipReason | null, note?: string | null) => {
+      const changes: Partial<Slot> = away
+        ? { away, awayNote: note?.trim() || null, mealId: null, mealName: '' }
+        : { away: null, awayNote: null }
+      const plan = plans?.[weekStart]
+      if (plan) {
+        const slots = plan.slots.slice()
+        slots[index] = { ...slots[index], ...changes }
+        updateDoc(weekPlanRef(hid, weekStart), { slots }).catch(fail)
+        return
+      }
+      const slots = blankSlots()
+      slots[index] = { ...slots[index], ...changes }
+      const fresh: WeekPlan = {
+        id: newId(),
+        weekStart,
+        slots,
+        status: 'pencilled',
+        seed: 0,
+        thin: [],
+        generatedBy: 'client',
+        ticked: {},
+      }
+      setDoc(weekPlanRef(hid, weekStart), fresh).catch(fail)
+    },
+    [hid, plans, fail],
+  )
+
   const saveMeal = useCallback(
     (meal: Meal, created: Ingredient[] = []) => {
       commitMeal(hid, meal, created).catch(fail)
@@ -263,6 +294,7 @@ export function LarderProvider({ children }: { children: ReactNode }) {
     acceptWeek,
     reopenWeek,
     patchSlot,
+    setSlotAway,
     saveMeal,
     renameIngredient,
     setMealArchived,
