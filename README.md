@@ -14,7 +14,8 @@ is `docs/development-plan.md`. Firebase and Cloudflare setup are in `docs/`.
 pnpm install
 pnpm emulators      # Firebase auth + Firestore emulators (needs Java); data persists in .emulator/
 pnpm dev            # Vite dev server — in dev it talks to the emulators, never production
-pnpm seed           # make emulator accounts founders + write the starter library (sign in once first)
+pnpm seed you@x.com # authorise an address past the beta gate before its first sign-in
+pnpm seed           # ...or promote accounts that already signed in, + write the starter library
 pnpm vitest run     # tests, one shot (`pnpm test` watches)
 pnpm test:rules     # Firestore security rules test; needs the emulators running
 pnpm typecheck      # tsc -b --noEmit
@@ -24,8 +25,14 @@ pnpm build          # tsc -b && vite build
 
 Sign-in needs the `VITE_FIREBASE_*` variables in `.env.local` (see `docs/firebase-setup.md`). In the
 auth emulator, "Sign in with Google" offers to make up a fake account — any will do. The app is
-invite-only: a fresh account lands on a locked screen until `pnpm seed` makes it a founder (locally) or
-a member invites it from Settings.
+invite-only: a fresh account lands on a locked screen until it is a founder (locally) or a member
+invites it from Settings.
+
+The quickest way past that gate locally is `pnpm seed you@example.com` *before* you sign in —
+`/founders/{email}` is keyed by address, not uid, so authorising it up front means the first sign-in
+founds a household rather than bouncing. Run `pnpm seed` again to fill that household with the starter
+library. The gate itself is enforced by `firestore.rules`, which is the same file dev and prod use, so
+there is nothing to switch off and nothing to remember not to deploy.
 
 ## Where things live
 

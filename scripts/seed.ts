@@ -1,14 +1,20 @@
 /**
  * Seed the local emulators so a fresh sign-in can get going.
  *
- *   pnpm emulators        # in one terminal
- *   (sign in to the app once, so an auth account exists — it lands on "invite only")
- *   pnpm seed             # in another; then reload the app
+ *   pnpm emulators                    # in one terminal
+ *   pnpm seed you@example.com         # in another, before you sign in at all
+ *
+ * Naming an email up front is the short way round the beta gate: `/founders/{email}`
+ * is keyed by address, not uid, so authorising it before the account exists means the
+ * first sign-in founds a household instead of bouncing off the locked screen. Run
+ * `pnpm seed` again afterwards to fill the new household with the starter library.
+ * With no arguments it still promotes whatever accounts have already signed in.
  *
  * Two jobs, both idempotent:
- *   1. Every Auth-emulator account becomes a founder (`/founders/{email}`), since the
- *      rules only let founders create a household. Production has exactly one
- *      founder, written by hand in the console — see docs/firebase-setup.md §9.
+ *   1. Emails named on the command line, plus every Auth-emulator account, become
+ *      founders (`/founders/{email}`), since the rules only let founders create a
+ *      household. Production has exactly one founder, written by hand in the
+ *      console — see docs/firebase-setup.md §9.
  *   2. Every household with no meals yet gets `SEED_MEALS` and the ingredient
  *      catalog they point at. A founder with no household gets one first, so a
  *      single run of this script is enough.
@@ -41,10 +47,21 @@ if (process.env.FIREBASE_AUTH_EMULATOR_HOST !== AUTH_EMULATOR) {
 initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'larder-67041' })
 const db = getFirestore()
 
+/** Lower-cased to match the doc ids the rules look up via `myEmail()`. */
+const preAuthorised = process.argv
+  .slice(2)
+  .map((arg) => arg.trim().toLowerCase())
+  .filter(Boolean)
+
 async function main() {
+  for (const email of preAuthorised) {
+    await db.doc(`founders/${email}`).set({ seededAt: FieldValue.serverTimestamp() }, { merge: true })
+    console.log(`${email}: founder (no account yet — sign in as this address to found a household).`)
+  }
+
   const { users } = await getAuth().listUsers(1000)
-  if (users.length === 0) {
-    console.log('No accounts in the auth emulator yet — sign in to the app once first, then re-run.')
+  if (users.length === 0 && preAuthorised.length === 0) {
+    console.log('No accounts in the auth emulator yet — sign in to the app once first, or name an email: pnpm seed you@example.com')
     return
   }
 
