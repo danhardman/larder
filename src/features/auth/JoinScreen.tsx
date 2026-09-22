@@ -1,5 +1,6 @@
 import type { Invite } from '../../types'
-import { GateShell, SignedInAs } from './GateShell'
+import { GateShell } from './GateShell'
+import { SignedInAs } from './SignedInAs'
 
 interface JoinScreenProps {
   invite: Invite

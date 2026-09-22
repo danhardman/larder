@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
+import { Avatar } from '../../components/Avatar'
 import { ChipRow } from '../../components/ChipRow'
 import { CloseIcon } from '../../components/icons'
+import { Section } from '../../components/Section'
 import type { Household, Invite, Settings } from '../../types'
 import { RECENCY_WINDOWS, ROTATION_SIZES } from '../../types/settings'
 
@@ -148,23 +150,5 @@ export function SettingsScreen({
         </div>
       </Section>
     </div>
-  )
-}
-
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <section className="px-5 pt-6">
-      <h2 className="text-[12px] font-bold tracking-[0.12em] text-neutral-600 uppercase">{title}</h2>
-      {hint && <p className="mt-1 text-[12.5px] leading-[1.5] text-neutral-600">{hint}</p>}
-      <div className="mt-3 rounded-md border border-divider bg-neutral-100 px-4 py-2">{children}</div>
-    </section>
-  )
-}
-
-function Avatar({ name }: { name: string }) {
-  return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-200 text-[13px] font-bold text-accent-800">
-      {name.slice(0, 1).toUpperCase()}
-    </span>
   )
 }

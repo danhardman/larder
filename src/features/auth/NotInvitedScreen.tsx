@@ -1,5 +1,6 @@
 import { useAuth } from '../../state/auth'
-import { GateShell, SignedInAs } from './GateShell'
+import { GateShell } from './GateShell'
+import { SignedInAs } from './SignedInAs'
 
 /** Signed in, but not a member of anything, not invited, and not a founder. The
  *  invite listener behind this screen is live: an invite turns it into the join
