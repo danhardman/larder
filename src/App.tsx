@@ -61,7 +61,12 @@ export default function App() {
   return (
     <div className="flex h-dvh justify-center overflow-hidden bg-neutral-300">
       <div className="relative flex h-dvh w-full max-w-[430px] min-h-0 flex-col overflow-hidden bg-bg shadow-[0_0_60px_rgba(46,43,37,0.18)]">
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(104px+env(safe-area-inset-bottom))]">
+        {/* Keyed on the tab so each screen gets a fresh scroll container and
+            starts at the top, rather than inheriting the last screen's offset. */}
+        <div
+          key={screen}
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(104px+env(safe-area-inset-bottom))]"
+        >
           {screen === 'weeks' && (
             <WeeksScreen
               weeks={weeks.weeks}
