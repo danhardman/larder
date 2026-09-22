@@ -1,2 +1,8 @@
+# Sign-in opens a Google OAuth popup and reads `popup.closed` to notice the user
+# dismissing it. Chrome's default would let the popup sever the opener reference;
+# this keeps our half of it intact. (docs/firebase-setup.md §6)
+/*
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+
 /sw.js
   Cache-Control: no-cache

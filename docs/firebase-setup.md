@@ -105,8 +105,36 @@ local dev if you get it wrong):
 
 1. <https://console.cloud.google.com/apis/credentials> → the auto-created
    **Browser key (auto created by Firebase)**.
-2. **Application restrictions → HTTP referrers**, add your Pages domain(s)
-   (§7.2). `localhost` needs an entry too if you ever hit prod from local.
+2. **Application restrictions → HTTP referrers**. The list needs *three* kinds of
+   entry, and missing the third is the trap:
+
+   - your Pages domain(s) (§7.2);
+   - `localhost`, if you ever hit prod from local dev;
+   - **`https://<project>.firebaseapp.com/*`** — the origin serving
+     `/__/auth/handler`, the page the Google popup lands on. That page calls the
+     Identity Toolkit API with this same key, so if it isn't allowed the popup dies
+     on Google's generic **"The requested action is invalid."** screen, with nothing
+     in your own console to explain it. This is *not* covered by having the domain in
+     Authorized domains (§7) — the two lists are unrelated.
+
+   `<project>.web.app` is Hosting's alias for the same site; it only needs an entry if
+   you point `authDomain` at it instead.
+
+   To check a key without a browser:
+
+   ```sh
+   curl -s -H "Referer: https://<project>.firebaseapp.com/" \
+     "https://identitytoolkit.googleapis.com/v1/projects?key=<api-key>"
+   ```
+
+   An allowed referrer returns the project's authorized-domain list; a blocked one
+   returns `403 API_KEY_HTTP_REFERRER_BLOCKED`.
+
+3. Serving the app with `Cross-Origin-Opener-Policy: same-origin-allow-popups`
+   (`public/_headers`) keeps the popup handle readable, so a user dismissing the popup
+   surfaces as `auth/popup-closed-by-user` rather than a promise that never settles.
+   Chrome may still log a COOP warning during sign-in — Google's accounts page sets
+   its own `same-origin` policy, and that half is not ours to change. It's noise.
 
 ## 7. Authorized domains for auth
 
