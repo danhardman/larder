@@ -121,31 +121,31 @@ describe('buildShoppingList', () => {
     const empty: Slot = { ...slot(0, 'a', 'x'), mealId: null, mealName: 'Nothing suitable' }
     expect(buildShoppingList([empty], [fajitas])).toEqual([])
   })
+})
 
-  it('formats a copyable list with the per-meal breakdown when expanded', () => {
-    const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), slot(1, 'b', 'Katsu curry')], [
-      fajitas,
-      katsu,
-    ])
-    const text = formatShoppingList(lines, '13 Jul', true)
-    expect(text).toContain('Shopping list — w/c 13 Jul')
-    expect(text).toContain('600 g — chicken thighs')
-    expect(text).toContain('↳ Chicken fajitas 300 g + Katsu curry 300 g')
+describe('formatShoppingList', () => {
+  const lines = buildShoppingList(
+    [slot(0, 'a', 'Chicken fajitas'), slot(1, 'b', 'Katsu curry')],
+    [fajitas, katsu],
+  )
+
+  it('is one line per thing to buy, under a heading naming the week', () => {
+    expect(formatShoppingList(lines, '13 Jul')).toBe(
+      [
+        'Shopping list — w/c 13 Jul',
+        '3 piece — bell peppers',
+        '600 g — chicken thighs',
+        '',
+      ].join('\n'),
+    )
   })
 
-  it('drops the breakdown when summed', () => {
-    const lines = buildShoppingList([slot(0, 'a', 'Chicken fajitas'), slot(1, 'b', 'Katsu curry')], [
-      fajitas,
-      katsu,
-    ])
-    const text = formatShoppingList(lines, '13 Jul', false)
-    expect(text).toContain('Shopping list — w/c 13 Jul')
-    expect(text).toContain('600 g — chicken thighs')
-    expect(text).not.toContain('↳')
-    // One line each, no blank line between them.
-    expect(text.trim().split('\n').slice(2)).toEqual([
-      '3 piece — bell peppers',
-      '600 g — chicken thighs',
-    ])
+  it('never emits a blank line — every line has to become one iOS Notes checkbox', () => {
+    const text = formatShoppingList(lines, '13 Jul')
+    expect(text.trimEnd().split('\n').filter((l) => !l.trim())).toEqual([])
+  })
+
+  it('leaves the per-meal breakdown on screen, out of the clipboard', () => {
+    expect(formatShoppingList(lines, '13 Jul')).not.toContain('↳')
   })
 })

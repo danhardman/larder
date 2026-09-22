@@ -76,22 +76,17 @@ export function formatContribution(c: Contribution, unit: Unit): string {
 }
 
 /**
- * The whole list as plain text for the clipboard, headed by the week. `expanded`
- * follows the screen's summed ↔ expanded toggle, so what you see is what you paste;
- * summed lines run together, expanded ones get a blank line to keep the breakdowns apart.
+ * The whole list as plain text for the clipboard, headed by the week.
+ *
+ * Shaped for where it actually lands: the iOS Notes app, where you paste it, Select All and
+ * tap the checklist button. That turns every line into a checkbox — so there are no blank
+ * lines anywhere, and never the `↳` breakdown lines, each of which would become a
+ * checkbox for something you can't buy. One line in, one thing to tick off in the shop.
+ *
+ * The breakdown stays on screen, where it helps you judge pack sizes without following you
+ * into the list; that's why this takes no `expanded` flag.
  */
-export function formatShoppingList(
-  lines: ShoppingLine[],
-  weekLabel: string,
-  expanded: boolean,
-): string {
-  const body = lines
-    .map((line) => {
-      const summed = `${round1(line.total)} ${line.unit} — ${line.name}`
-      if (!expanded) return summed
-      const breakdown = line.contributions.map((c) => formatContribution(c, line.unit)).join(' + ')
-      return `${summed}\n   ↳ ${breakdown}`
-    })
-    .join(expanded ? '\n\n' : '\n')
-  return `Shopping list — w/c ${weekLabel}\n\n${body}\n`
+export function formatShoppingList(lines: ShoppingLine[], weekLabel: string): string {
+  const body = lines.map((line) => `${round1(line.total)} ${line.unit} — ${line.name}`).join('\n')
+  return `Shopping list — w/c ${weekLabel}\n${body}\n`
 }
