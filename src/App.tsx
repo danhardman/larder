@@ -67,7 +67,6 @@ export default function App() {
               meals={store.meals}
               stats={store.stats}
               portionFor={slots.portionFor}
-              thinHint={slots.thinHint}
               onOpenSlot={(weekStart, index, scope) =>
                 setSheet({ weekStart, index, scope, mode: 'actions' })
               }

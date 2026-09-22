@@ -1,7 +1,50 @@
 rules_version = '2';
 
+// The whole authorization model (spec §3, §7.1): a signed-in user may read and
+// write everything under a household they are a member of, and nothing else.
+// Membership is the household document's `memberUids` — no custom claim, so a
+// future backend can answer the same question with one read (spec §7.4).
+//
+// Deploy with `firebase deploy --only firestore:rules`; tested by `pnpm test:rules`.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(hid) {
+      return signedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/households/$(hid)).data.memberUids;
+    }
+
+    match /households/{hid} {
+      // `list` is satisfied by the store's `memberUids array-contains uid` query and
+      // nothing broader — rules are evaluated against the query, not the results.
+      allow get, list: if signedIn() && request.auth.uid in resource.data.memberUids;
+
+      // You can found a household of one: yourself. Stage 3 adds joining another.
+      allow create: if signedIn()
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids == [request.auth.uid];
+
+      // Members may change the household (settings, name) but not drop their own
+      // membership — that would strand the data. Revisited in Stage 3.
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.memberUids
+        && request.auth.uid in request.resource.data.memberUids;
+
+      allow delete: if false;
+
+      // meals, weekPlans, ingredients: one extra document read per evaluation for
+      // the membership lookup, accepted at household scale (spec §3).
+      // `{collection}` is a single-segment wildcard on purpose: in rules v2 a bare
+      // `{document=**}` here also matches zero segments — the household doc itself —
+      // and would let a member delete it or drop their own membership.
+      match /{collection}/{document=**} {
+        allow read, write: if isMember(hid);
+      }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

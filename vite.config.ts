@@ -26,5 +26,8 @@ export default defineConfig({
   test: {
     // The generator and shopping-list modules are pure — no DOM needed.
     environment: 'node',
+    // `test/` holds the rules test, which needs the Firestore emulator running:
+    // `pnpm test:rules`, not part of the default run.
+    exclude: ['**/node_modules/**', 'test/**'],
   },
 })

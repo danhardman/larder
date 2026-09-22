@@ -1,24 +1,33 @@
 import { CalendarIcon, CheckIcon, LockIcon, ShuffleIcon } from '../../components/icons'
 import { addDays, DAY_NAMES, formatDay } from '../../lib/dates'
+import { seasonForWeek } from '../../lib/seasons'
 import { DayCard } from './DayCard'
 import { slotsForDay, TYPE_INITIAL, type WeekView } from './weekView'
 
 interface PlannerProps {
   week: WeekView
-  /** e.g. "Your library's a bit thin for summer breakfasts" — set after a draft. */
-  thinHint: string | null
   onDraft: (weekStart: string) => void
   onReopen: (weekStart: string) => void
   onOpenSlot: (weekStart: string, index: number) => void
   onGoShop: () => void
 }
 
-/** A week you can still change: empty → draft → accepted. */
-export function Planner({ week, thinHint, onDraft, onReopen, onOpenSlot, onGoShop }: PlannerProps) {
+/**
+ * A week you can still change: empty → draft → accepted. `generating` renders as a
+ * draft that can't be tweaked yet and `failed` as an empty week with a retry; v1
+ * never writes either, but a server-generated plan will (spec §3).
+ */
+export function Planner({ week, onDraft, onReopen, onOpenSlot, onGoShop }: PlannerProps) {
   const plan = week.plan
   const status = !plan ? 'empty' : plan.status
-  const stepIndex = status === 'empty' ? 0 : status === 'draft' ? 1 : 2
+  const stepIndex =
+    status === 'empty' || status === 'failed' ? 0 : status === 'draft' || status === 'generating' ? 1 : 2
   const steps = ['Generate', 'Review & tweak', 'Shopping list']
+  const showEmpty = !plan || plan.status === 'failed'
+  // Persisted on the plan (spec §3) so it survives a reload and shows on both phones.
+  const thinHint = plan?.thin.length
+    ? `Your library’s a bit thin for ${seasonForWeek(week.start)} ${plan.thin[0]} — worth adding one or two.`
+    : null
 
   return (
     <div>
@@ -41,16 +50,19 @@ export function Planner({ week, thinHint, onDraft, onReopen, onOpenSlot, onGoSho
         </div>
       </div>
 
-      {!plan && (
+      {showEmpty && (
         <div className="px-5 pt-[22px]">
           <div className="rounded-lg border-[1.5px] border-dashed border-neutral-400 bg-neutral-100 px-[22px] py-7">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-200 text-accent-800">
               <CalendarIcon size={26} />
             </div>
-            <div className="mt-4 font-heading text-[22px] leading-[1.2]">Nothing planned yet</div>
+            <div className="mt-4 font-heading text-[22px] leading-[1.2]">
+              {status === 'failed' ? 'That draft didn’t land' : 'Nothing planned yet'}
+            </div>
             <div className="mt-[9px] text-[13.5px] leading-[1.55] text-neutral-700" style={{ textWrap: 'pretty' }}>
-              One tap gives you seven dinners with no repeats, plus a breakfast and lunch rotation. Tweak
-              whatever you like before the list gets built.
+              {status === 'failed'
+                ? 'Something went wrong generating this week. Try again — nothing you had is lost.'
+                : 'One tap gives you seven dinners with no repeats, plus a breakfast and lunch rotation. Tweak whatever you like before the list gets built.'}
             </div>
             <button
               type="button"
@@ -58,13 +70,13 @@ export function Planner({ week, thinHint, onDraft, onReopen, onOpenSlot, onGoSho
               className="btn btn-primary mt-[18px] w-full gap-[9px] py-[14px] text-[15.5px] font-bold"
             >
               <ShuffleIcon size={17} />
-              Draft the week
+              {status === 'failed' ? 'Try again' : 'Draft the week'}
             </button>
           </div>
         </div>
       )}
 
-      {plan && (
+      {!showEmpty && (
         <div>
           {plan.status === 'accepted' && (
             <div className="mx-5 mt-4 rounded-md border-[1.5px] border-sage-300 bg-sage-100 px-4 py-[14px]">
@@ -97,6 +109,12 @@ export function Planner({ week, thinHint, onDraft, onReopen, onOpenSlot, onGoSho
           {plan.status === 'draft' && (
             <div className="mx-5 mt-4 text-[13px] leading-[1.5] text-neutral-700">
               Tap any meal to roll it again, pick your own, or lock it. Locked slots survive a re-roll.
+            </div>
+          )}
+
+          {plan.status === 'generating' && (
+            <div className="mx-5 mt-4 text-[13px] leading-[1.5] text-neutral-700">
+              Drafting this week… it’ll fill in as soon as it’s ready.
             </div>
           )}
 

@@ -19,7 +19,7 @@ function slot(outcome: Slot['outcome']): Slot {
 }
 
 function plan(status: WeekPlan['status'], slots: Slot[]): WeekPlan {
-  return { id: 'p', weekStart: '2026-09-21', slots, status, seed: 1 }
+  return { id: 'p', weekStart: '2026-09-21', slots, status, seed: 1, thin: [], generatedBy: 'client', ticked: {} }
 }
 
 function view(offset: number, p?: WeekPlan): WeekView {

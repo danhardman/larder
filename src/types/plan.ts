@@ -20,14 +20,29 @@ export interface Slot {
   portionFeedback: PortionFeedback | null
 }
 
+/**
+ * `generating` and `failed` exist for the planned backend (spec §7.4): v1 never
+ * writes them, but the screens render them so a server-generated plan is not a
+ * new concept the UI has to learn.
+ */
+export type PlanStatus = 'generating' | 'draft' | 'accepted' | 'failed'
+
 export interface WeekPlan {
   id: string
   /** ISO date of the Monday this plan covers — also the recency sort key. */
   weekStart: string
   slots: Slot[]
-  status: 'draft' | 'accepted'
+  status: PlanStatus
   /** RNG seed, persisted so a baffling plan can be reproduced. */
   seed: number
+  /** Meal types the library couldn't comfortably cover, e.g. `['breakfasts']`. Persisted
+   *  on the plan rather than returned from `draftWeek` so the UI reads it off the
+   *  document it is already subscribed to (spec §3). */
+  thin: string[]
+  /** Which side produced this plan. Always `client` until the backend lands. */
+  generatedBy: 'client' | 'server'
+  /** Shopping-list ticks for this week, keyed by `name|unit`. */
+  ticked: Record<string, boolean>
 }
 
 /* Labels live with the enums they describe so a new value can't be added without one. */

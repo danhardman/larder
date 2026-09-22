@@ -15,7 +15,6 @@ interface WeeksScreenProps {
   meals: Meal[]
   stats: Map<string, MealStats>
   portionFor: SlotRef | null
-  thinHint: string | null
   onOpenSlot: (weekStart: string, index: number, scope: SlotScope) => void
   onTick: (weekStart: string, index: number) => void
   onPortion: (weekStart: string, index: number, value: PortionFeedback, label: string) => void
@@ -69,7 +68,6 @@ export function WeeksScreen(props: WeeksScreenProps) {
       {!isPast && !showLive && (
         <Planner
           week={week}
-          thinHint={props.thinHint}
           onDraft={props.onDraft}
           onReopen={props.onReopen}
           onOpenSlot={(weekStart, index) => props.onOpenSlot(weekStart, index, 'draft')}

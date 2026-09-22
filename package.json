@@ -9,7 +9,10 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest --passWithNoTests",
-    "typecheck": "tsc -b --noEmit"
+    "test:rules": "vitest run --config vitest.rules.config.ts",
+    "typecheck": "tsc -b --noEmit",
+    "emulators": "firebase emulators:start --import=.emulator --export-on-exit",
+    "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "firebase": "^12.17.1",
@@ -17,13 +20,16 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "firebase-admin": "^14.4.0",
     "oxlint": "^1.75.0",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
     "vite-plugin-pwa": "^1.3.0",

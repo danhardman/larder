@@ -20,7 +20,7 @@ function slot(
 }
 
 function plan(weekStart: string, status: WeekPlan['status'], slots: Slot[]): WeekPlan {
-  return { id: weekStart, weekStart, slots, status, seed: 1 }
+  return { id: weekStart, weekStart, slots, status, seed: 1, thin: [], generatedBy: 'client', ticked: {} }
 }
 
 function simple(weekStart: string, status: WeekPlan['status'], mealIds: (string | null)[]): WeekPlan {

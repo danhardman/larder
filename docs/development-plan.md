@@ -20,6 +20,7 @@ built against a subset of the spec. The app runs, 28 tests pass, `tsc -b` is cle
 | Tick-off tracking | `src/features/weeks/` (`useSlotActions.ts`, `SlotSheet.tsx`, `LiveWeek.tsx`) | eaten/skipped + skip reasons + optional, skippable portion rating |
 | Meal CRUD | `src/features/library/` (`MealEditor.tsx`, `useLibrary.ts`) | Create/edit/archive/restore/delete, delete guarded by `usedMealIds` |
 | Setup docs | `docs/firebase-setup.md`, `docs/cloudflare-pages-setup.md` | Already written and accurate — the stages below point at them rather than repeating them |
+| Firestore store | `src/state/store.tsx`, `src/state/db.ts`, `firestore.rules` | Stage 2 — household-scoped, offline-first, rules tested |
 
 **The gaps:** no Firebase at all (SDK installed, never imported), no household scoping, no auth, no real
 ingredient catalog, no Settings screen, no insights view, plus dead stubs (`effort`, the
@@ -103,8 +104,8 @@ Two configuration traps surfaced while testing, both now written up in `firebase
   logs a COOP warning during sign-in — that comes from Google's accounts page, and is noise.
 
 **Still carried forward:** the account pill in `src/features/auth/AuthGate.tsx` stays until Stage 5 gives
-it a real Settings screen, and there is still no household check — any Google account gets in until
-Stage 3 adds membership.
+it a real Settings screen. Since Stage 2, a Google account that gets in lands in its own household;
+Stage 3 adds joining someone else's.
 
 ---
 
@@ -152,7 +153,7 @@ All four done. 43 tests across 5 files, `tsc -b` and `oxlint` clean.
 
 ---
 
-## Stage 2 — Firestore backbone + household scoping ⚠️
+## Stage 2 — Firestore backbone + household scoping ✅ done
 
 Spec §3, §7.1. The largest structural change. The spec wanted household scoping "from day one" precisely
 to avoid this — so it happens in one deliberate stage rather than leaking through later ones.
@@ -168,9 +169,10 @@ to avoid this — so it happens in one deliberate stage rather than leaking thro
 - `src/state/firebase.ts` — init app, Firestore with **offline persistence enabled** (spec §5: the shopping
   list must work in a supermarket with no signal), and `connectAuthEmulator` / `connectFirestoreEmulator`
   behind `import.meta.env.DEV` so local dev never touches production data.
-- **Write `firestore.rules`** — read/write under `/households/{hid}/**` only if the auth token's
-  `householdId` claim equals `hid`. Per spec §7.1 the rules *are* the entire authorization layer; this is
-  the one piece where a permissive default loses the whole security model.
+- **Write `firestore.rules`** — read/write under `/households/{hid}/**` only if the caller's uid is in
+  the household's `memberUids` (spec §3 — the custom-claim wording this stage originally carried was
+  superseded by the spec). Per spec §7.1 the rules *are* the entire authorization layer; this is the one
+  piece where a permissive default loses the whole security model.
 - **Rewrite `src/state/store.tsx`** against Firestore collections `meals`, `ingredients`, `weekPlans` under
   `/households/{hid}`, keeping the `useLarder()` interface **unchanged** so no screen has to change. That
   constraint is what makes this stage reviewable — the UI should behave identically afterwards.
@@ -181,6 +183,39 @@ to avoid this — so it happens in one deliberate stage rather than leaking thro
 
 **Review:** run the emulator, confirm every screen works unchanged, then kill the network and confirm the
 shopping list still renders and ticks.
+
+### Outcome
+
+- **Layout** — `src/state/db.ts` (paths, snapshot → domain mappers with defaults, `findOrCreateHousehold`)
+  under `src/state/store.tsx` (three `onSnapshot` subscriptions, actions writing straight to documents).
+  `src/state/storage.ts` is gone; `newId` moved to `src/lib/ids.ts`, `DEFAULT_SETTINGS` to
+  `src/types/settings.ts`. New `src/types/household.ts`.
+- **Household bootstrap** — on first sign-in the store queries `households` by `memberUids
+  array-contains uid` and creates a household of one if there is none. That is the whole membership
+  layer for now; Stage 3 adds joining.
+- **Document ids** — meals use `meal.id`; **week plans use `weekStart` as the doc id** (deviation from
+  the spec's uuid: one plan per week becomes structural and two devices drafting the same week offline
+  converge on one document; the `id` field is still stored). `settings` sits on the household doc,
+  `ticked` on the plan doc as a map written per key via `FieldPath` so `.` in ingredient names is safe.
+- **Spec §7.4 constraints honoured** — `draftWeek` is now `Promise<void>` and `thin` is persisted on
+  the plan; `Planner` reads the hint off the document (it survives reloads and shows on both phones).
+  `WeekPlan.status` carries `generating` / `failed` and the weeks screens render both. This was the one
+  change to the `useLarder()` interface; everything else is untouched.
+- **Offline** — `initializeFirestore` with `persistentLocalCache` + multi-tab manager. Writes are
+  deliberately not awaited: with persistence a write promise only settles on server ack, so awaiting
+  would hang in the supermarket. The local snapshot drives the UI; rejected writes surface as an error
+  screen (which is also what a not-yet-deployed rules file looks like in production).
+- **No localStorage import** — the prototype data wasn't worth keeping.
+- **Rules test** (`test/rules.test.ts`, `pnpm test:rules`) — worth it on the first run: a bare
+  `{document=**}` nested under `/households/{hid}` also matches zero segments in rules v2, i.e. the
+  household doc itself, which let a member delete the household or drop their own membership. Now a
+  single-segment `{collection}` wildcard sits in front of it.
+- **Tooling** — `pnpm emulators` (with `--import=.emulator --export-on-exit`), `pnpm seed`
+  (`scripts/seed.ts`, Admin SDK, refuses to run off-emulator), `pnpm test:rules`. `tsconfig.node.json`
+  moved to bundler resolution so `scripts/` and `test/` share the app's import style.
+
+**Still to do by hand:** `firebase deploy --only firestore:rules` before the next Cloudflare deploy;
+then the phone check (sign in, see an empty household, draft a week, go offline, tick the list).
 
 ---
 
@@ -195,16 +230,10 @@ than building auth from scratch.
 - Invite/join a second member.
 - Plan history already feeds the recency rules (`recentDinnerIds`), so nothing new is needed there.
 
-**Open decision — the custom claim.** The spec wants `householdId` as a custom claim, but setting one
-requires the Admin SDK, and spec §7.1 forbids Cloud Functions. Two ways out, both fine at this scale:
-
-- **(a)** Set the claim from a local Admin-SDK script when you add a member — you run it once per person,
-  ever. Keeps the spec's rule shape exactly.
-- **(b)** *(recommended)* Drop the claim; have the rule read `memberUids` off the household doc:
-  `get(/databases/$(db)/documents/households/$(hid)).data.memberUids.hasAny([request.auth.uid])`.
-  No Admin SDK, self-service invites, costs one extra document read per rule evaluation.
-
-I'll ask you to pick when we reach this stage.
+**Decided (spec §3, §9): no custom claim.** The rules read `memberUids` off the household doc, and Stage 2
+already ships them that way. This stage only has to add a way to put a second uid into that array —
+the `create`/`update` rules currently allow a household of exactly one, and will need to loosen to
+accept an invite.
 
 **Your manual work:** sign in on both phones, confirm you see the same data.
 
@@ -299,7 +328,8 @@ Lowest-value items, batched last so you can stop before them without losing anyt
 - `pnpm test` and `pnpm typecheck` — both green today (43 tests, 5 files); keep them green.
   Note `test` is `vitest` with no `run` flag, so it watches; use `pnpm vitest run` for a one-shot.
 - `pnpm lint` (oxlint).
-- `pnpm dev` alongside `firebase emulators:start` from Stage 2 onward — never against production data.
+- `pnpm dev` alongside `pnpm emulators` from Stage 2 onward — never against production data.
+  `pnpm test:rules` whenever `firestore.rules` changes; deploy the rules by hand afterwards.
 - A manual pass on the phone for anything touching auth or install behaviour. The desktop browser will not
   reproduce the failure modes that matter here.
 

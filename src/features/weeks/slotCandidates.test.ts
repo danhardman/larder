@@ -22,6 +22,9 @@ const plan: WeekPlan = {
   weekStart: '2026-07-06',
   status: 'draft',
   seed: 1,
+  thin: [],
+  generatedBy: 'client',
+  ticked: {},
   slots: [
     slot(0, 'lunch', 'm3'), // Chicken wraps, Monday lunch
     slot(0, 'dinner', 'm6'), // Chilli, Monday dinner

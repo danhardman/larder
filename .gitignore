@@ -9,6 +9,8 @@ lerna-debug.log*
 
 node_modules
 dist
+# Firebase emulator data (pnpm emulators exports here on exit)
+.emulator
 dist-ssr
 dev-dist
 *.local

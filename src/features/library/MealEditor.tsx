@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { newId } from '../../state/storage'
+import { newId } from '../../lib/ids'
 import { round1 } from '../../lib/shoppingList'
 import {
   CARB_BASES,

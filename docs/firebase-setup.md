@@ -1,8 +1,7 @@
 # Firebase setup
 
-> **Not needed yet.** Nothing in the app imports Firebase — the SDK is installed and
-> that's all. Work through this when you're ready to start M0/M1 from the spec.
-> Everything here is manual console/CLI work; none of it has been done for you.
+> §1–5 and §7 are done. §6 (API key restrictions) is Stage 8 work. Everything here is
+> manual console/CLI work.
 
 Spec references: §7 (architecture), §7.1 (where the logic runs), §7.3 (auth), §8 (milestones).
 
@@ -89,14 +88,35 @@ echo 'export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"' >> ~/.zshrc
 Run with:
 
 ```sh
-firebase emulators:start
+pnpm emulators      # firebase emulators:start --import=.emulator --export-on-exit
 ```
 
-Then in the app's Firebase init, wire `connectAuthEmulator` / `connectFirestoreEmulator`
-behind `import.meta.env.DEV` so local dev never touches production data.
+Emulator data is exported to `.emulator/` (gitignored) on a clean exit and imported on
+the next start, so a seeded household survives restarts. `src/state/firebase.ts` wires
+`connectAuthEmulator` / `connectFirestoreEmulator` behind `import.meta.env.DEV`, so
+`pnpm dev` never touches production data.
 
-The seed script (§7, M1) is a plain Node script that writes a fake meal library into the
-emulator — write it when there's a schema to seed.
+First time through:
+
+1. `pnpm dev`, open the app, **Sign in with Google** — the auth emulator offers to
+   invent an account. The app creates a household for it.
+2. `pnpm seed` — writes the 12-meal starter library (`src/data/seedLibrary.ts`) into
+   every household that has no meals yet. Admin SDK against the emulator only; it
+   refuses to run if `FIRESTORE_EMULATOR_HOST` points anywhere else.
+
+### Security rules
+
+`firestore.rules` is the entire authorization layer (spec §7.1): a signed-in user may
+read and write under `/households/{hid}/**` only if their uid is in that household's
+`memberUids`. The rules are tested against the emulator by `pnpm test:rules`.
+
+**Deploy them yourself** whenever they change — the production project still has the
+deny-all default until you do, and the deployed app shows a permission error rather
+than a blank screen:
+
+```sh
+firebase deploy --only firestore:rules
+```
 
 ## 6. Restrict the API key
 

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { portionWarning } from '../../lib/stats'
-import { newId } from '../../state/storage'
+import { newId } from '../../lib/ids'
 import { useLarder } from '../../state/store'
 import { useToast } from '../../state/toast'
 import type { Meal } from '../../types'

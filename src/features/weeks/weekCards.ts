@@ -36,14 +36,24 @@ export function buildWeekCards(weeks: WeekView[]): WeekCard[] {
         meta: `${eaten} eaten · ${skipped} skipped`,
       }
     }
-    if (plan.status === 'draft') {
+    if (plan.status === 'draft' || plan.status === 'generating') {
       return {
         key: w.iso,
         kicker,
         range,
-        chip: 'Draft',
+        chip: plan.status === 'draft' ? 'Draft' : 'Drafting',
         chipClass: CHIP.accent,
-        meta: 'Review before shopping',
+        meta: plan.status === 'draft' ? 'Review before shopping' : 'Generating…',
+      }
+    }
+    if (plan.status === 'failed') {
+      return {
+        key: w.iso,
+        kicker,
+        range,
+        chip: 'Failed',
+        chipClass: CHIP.accent,
+        meta: 'Tap to try again',
       }
     }
     const done = plan.slots.filter((s) => s.outcome !== 'pending').length

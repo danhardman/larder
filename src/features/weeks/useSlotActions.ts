@@ -13,14 +13,13 @@ export type SlotActions = ReturnType<typeof useSlotActions>
 /**
  * Everything the user can do to a week or one of its slots, each paired with
  * its toast. Pure state changes live in the store; this layer adds the wording
- * and the follow-on UI (the portion prompt, the thin-library hint).
+ * and the follow-on UI (the portion prompt).
  */
 export function useSlotActions({ onAccepted }: { onAccepted: () => void }) {
   const store = useLarder()
   const { say } = useToast()
   /** The slot just ticked as eaten, while the portion prompt is showing. */
   const [portionFor, setPortionFor] = useState<SlotRef | null>(null)
-  const [thinHint, setThinHint] = useState<string | null>(null)
 
   const markEaten = (weekStart: string, index: number) => {
     store.patchSlot(weekStart, index, { outcome: 'eaten', skipReason: null })
@@ -76,11 +75,9 @@ export function useSlotActions({ onAccepted }: { onAccepted: () => void }) {
   }
 
   const draftWeek = (weekStart: string) => {
-    const { thin } = store.draftWeek(weekStart)
-    const drafted = seasonForWeek(fromISODate(weekStart))
-    setThinHint(
-      thin.length ? `Your library’s a bit thin for ${drafted} ${thin[0]} — worth adding one or two.` : null,
-    )
+    // The result lands on the plan document, not here — the thin-library hint is
+    // read off `plan.thin` by the Planner (spec §7.4, constraint 1).
+    void store.draftWeek(weekStart)
     say('Here’s a draft — have a look before we shop.')
   }
 
@@ -97,7 +94,6 @@ export function useSlotActions({ onAccepted }: { onAccepted: () => void }) {
 
   return {
     portionFor,
-    thinHint,
     markEaten,
     markSkipped,
     setPortion,

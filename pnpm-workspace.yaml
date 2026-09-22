@@ -3,4 +3,5 @@
 # avoids the ERR_PNPM_IGNORED_BUILDS error that otherwise fails every command.
 allowBuilds:
   '@firebase/util': true
+  esbuild: true
   protobufjs: true

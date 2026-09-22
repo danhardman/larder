@@ -12,14 +12,18 @@ is `docs/development-plan.md`. Firebase and Cloudflare setup are in `docs/`.
 
 ```sh
 pnpm install
-pnpm dev            # Vite dev server
+pnpm emulators      # Firebase auth + Firestore emulators (needs Java); data persists in .emulator/
+pnpm dev            # Vite dev server — in dev it talks to the emulators, never production
+pnpm seed           # write the starter meal library into the emulator (sign in to the app once first)
 pnpm vitest run     # tests, one shot (`pnpm test` watches)
+pnpm test:rules     # Firestore security rules test; needs the emulators running
 pnpm typecheck      # tsc -b --noEmit
 pnpm lint           # oxlint
 pnpm build          # tsc -b && vite build
 ```
 
-Sign-in needs the `VITE_FIREBASE_*` variables in `.env.local` (see `docs/firebase-setup.md`).
+Sign-in needs the `VITE_FIREBASE_*` variables in `.env.local` (see `docs/firebase-setup.md`). In the
+auth emulator, "Sign in with Google" offers to make up a fake account — any will do.
 
 ## Where things live
 
@@ -31,18 +35,21 @@ src/
   types/            The persisted domain model, and nothing else.
     meal.ts         Meal, MealIngredient and the classification enums + their lists.
     plan.ts         WeekPlan, Slot, outcomes, skip reasons, portion feedback + labels.
-    settings.ts     Household settings.
+    settings.ts     Household settings and their defaults.
+    household.ts    The household document everything lives under (name, memberUids, settings).
   lib/              Pure functions with no React and no IO: the plan generator, the
                     shopping list, stats, seasons, seeded randomness, date helpers. Tests sit
                     beside the modules. Anything that touches a screen, the network or
                     storage does not belong here.
   data/             Static data: the seed library a new household starts with.
   state/            React context providers and their hooks.
-    store.tsx       useLarder(): all persisted data plus the actions that change it.
+    store.tsx       useLarder(): all household data plus the actions that change it,
+                    subscribed live to Firestore.
+    db.ts           Firestore paths, snapshot → domain mappers, find-or-create household.
     auth.tsx        useAuth(): Firebase sign-in state.
     toast.tsx       useToast(): say('...') shows a transient message.
-    storage.ts      localStorage adapter behind the store (Firestore from Stage 2).
-    firebase.ts     Firebase SDK init; the backend the state layer talks to.
+    firebase.ts     Firebase SDK init: app, auth, Firestore with offline persistence,
+                    emulator wiring in dev.
   components/       Shared, feature-agnostic UI: BottomSheet, TabBar, SwipeRow, icons.
                     A component with its own helpers gets a folder (SwipeRow/index.tsx
                     + swipeGesture.ts); the rest are single files.
@@ -51,21 +58,29 @@ src/
     weeks/          App.tsx.
     library/
     shopping/
+scripts/seed.ts     Writes the seed library into the emulator (Admin SDK; refuses to run elsewhere).
+test/rules.test.ts  Security rules test against the emulator.
+firestore.rules     The authorization layer: members of a household, and nobody else.
 ```
 
 ## How data flows
 
 `useLarder()` is the single source of truth. It exposes the data (`meals`, `plans`, `ticked`,
 `settings`), derived views (`stats`, `usedMealIds`) and the actions (`draftWeek`, `patchSlot`,
-`saveMeal`, ...). Today it persists to localStorage; Stage 2 moves it to Firestore behind the same
-interface.
+`saveMeal`, ...). It is backed by Firestore under `/households/{hid}` with offline persistence on:
+three live subscriptions (the household doc, `meals`, `weekPlans`) feed the data, and actions write
+straight to documents without awaiting the server — offline, the local snapshot updates at once and
+the write syncs later. Screens never import Firestore; the store is the seam (spec §7.4).
+
+`draftWeek` never returns the generated plan. It writes the week plan document, `thin` hint
+included, and the Planner reads the result off the plan it is already subscribed to.
 
 Feature hooks sit on top of the store and add what the store shouldn't know about: the wording of
 toasts, follow-on UI (the portion prompt after "Ate it"), and screen-local state (search text, which
 slot's sheet is open). Screens and components are presentational and take everything as props.
 
 ```
-lib/ (pure)  ←  state/store.tsx (+ storage)  ←  features/*/use*.ts  ←  features/*/Screen.tsx  ←  App.tsx
+lib/ (pure)  ←  state/store.tsx (+ db.ts, firebase.ts)  ←  features/*/use*.ts  ←  features/*/Screen.tsx  ←  App.tsx
 ```
 
 ## Adding things

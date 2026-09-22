@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SignInScreen } from './SignInScreen'
+import { LoadingScreen } from '../../components/LoadingScreen'
 import { useAuth } from '../../state/auth'
 import type { ReactNode } from 'react'
 
@@ -8,13 +9,7 @@ import type { ReactNode } from 'react'
 export function AuthGate({ children }: { children: ReactNode }) {
   const { status } = useAuth()
 
-  if (status === 'loading') {
-    return (
-      <div className="flex h-dvh items-center justify-center bg-bg">
-        <p className="text-[13px] tracking-[0.08em] text-neutral-600 uppercase">Opening the larder…</p>
-      </div>
-    )
-  }
+  if (status === 'loading') return <LoadingScreen />
 
   if (status === 'signed-out') return <SignInScreen />
 
