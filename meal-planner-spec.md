@@ -28,7 +28,7 @@ All app data lives under a household document, from day one. Even while there's 
   /weekPlans/{weekPlanId}
 ```
 
-Access control is enforced by Firestore security rules: a user may read/write anything under `/households/{hid}/**` only if their auth token's `householdId` matches `hid`. There is no server-side API layer (see §7).
+Access control is enforced by Firestore security rules: a user may read/write anything under `/households/{hid}/**` only if they are a member of that household. Membership is resolved from the household document's `memberUids[]` rather than a `householdId` custom claim — the claim requires the Admin SDK to set and only refreshes on token renewal, whereas `memberUids` is self-service, and is readable by a future backend verifying an ID token (§7.4). There is no server-side API layer in v1 (see §7), and the rules stay the authorization layer even once one exists.
 
 ### Meal
 Document at `/households/{hid}/meals/{mealId}`.
@@ -83,8 +83,14 @@ Document at `/households/{hid}/weekPlans/{weekPlanId}`.
 | id | uuid | document id |
 | weekStart | date | Monday — also used as the sort key for recency queries |
 | slots | Slot[] | embedded array: { day, mealType, mealId, mealName, locked, outcome, skipReason, skipNote, portionFeedback } |
-| status | enum | draft / accepted |
+| status | enum | generating / draft / accepted / failed |
 | seed | number | RNG seed used to generate this plan (see §4) |
+| thin | string[] | meal types the library couldn't comfortably cover, e.g. `['breakfasts']` — persisted, not returned |
+| generatedBy | enum | `client` / `server` — which side produced this plan (see §7.4) |
+
+**`status` carries the two generation states from day one** (`generating`, `failed`) even though v1 generates synchronously on-device and never writes them. They exist so that moving generation to the backend (§7.4) is a change inside the data layer rather than a new concept the UI has to learn. v1 screens must render both states — `generating` as a pending week, `failed` as a retryable one — even if they are unreachable locally.
+
+**`thin` is persisted on the document rather than returned from the generate call**, for the same reason: a backend job has no return value to hand back. The UI reads the hint off the plan it is already subscribed to.
 
 `mealName` is denormalised onto the slot so a historical week still renders correctly if the meal is later archived or renamed.
 
@@ -113,6 +119,8 @@ generatePlan(library: Meal[], history: WeekPlan[], season: Season, seed: number)
 ```
 
 The caller loads the library and recent history from Firestore, calls the function, and writes the result back. This keeps the only real logic in the app fast to unit-test against fixture libraries ("thin summer breakfasts", "everything is chicken") without touching the network or the emulator.
+
+**Keep it runtime-portable.** The generator — and the shopping-list and stats modules alongside it — must import nothing from Firebase, React, the DOM, or ambient clocks: every input arrives as an argument, including the season and the seed. That discipline is what makes them unit-testable today and what lets them be lifted into the backend (§7.4) as a file move rather than a rewrite. Treat "does this module have a hidden dependency on the browser?" as a review question, not an afterthought.
 
 **Seeded randomness:** the jitter uses an injected seeded RNG rather than `Math.random()`, and the seed is persisted on the WeekPlan. A baffling plan can then be reproduced exactly for debugging.
 
@@ -190,12 +198,12 @@ The "(2 packs of 300g?)" style hint is optional sugar — the core requirement i
 | PWA shell | `vite-plugin-pwa` (manifest + service worker) |
 | Hosting | **Cloudflare Pages** (familiar, git-push deploys). Firebase Hosting not used. |
 | Data | Cloud Firestore, **offline persistence enabled** |
-| Auth | Firebase Auth — **Google sign-in only**, via `signInWithPopup`. `householdId` custom claim drives security rules. |
+| Auth | Firebase Auth — **Google sign-in only**, via `signInWithPopup`. Security rules resolve membership from the household's `memberUids[]` (§3). |
 | Storage | Firebase Storage (only if meal photos are added later) |
 | Local dev | Firebase Emulator Suite + a seed script populating a fake meal library |
 | Testing | Vitest against the pure generator / shopping-list modules |
 
-**No backend API and no Cloud Functions in v1.** The React client talks directly to Firestore; security rules are the authorization layer. All logic (generation, scoring, list building) runs on-device. See §7.1.
+**No backend API and no Cloud Functions in v1** — but a backend **is** planned for v2, and v1 is built to accommodate it. In v1 the React client talks directly to Firestore, security rules are the authorization layer, and all logic (generation, scoring, list building) runs on-device. See §7.1 for why that is right for v1, and **§7.4 for the planned backend and the constraints v1 must honour so the move is additive rather than a rewrite**.
 
 **Escape hatch:** if native push, widgets or app-store presence are ever wanted, **Capacitor** wraps the same React codebase without a rewrite.
 
@@ -209,7 +217,9 @@ Firebase is a set of managed services, not a server you deploy application code 
 - **Security rules replace the API layer.** The authorization checks that would normally live in route middleware are declared in `firestore.rules` and enforced by Google's infrastructure. This is the part to get right — a permissive rule is the whole security model gone.
 - **The generator is just a TypeScript module** in the client bundle. "Pure function" means plain code, not a deployed artifact.
 
-Cloud Functions (Node, deployed to GCP) exist for work that *can't* be trusted to the client — payment processing, secret-holding API calls, reacting to database writes server-side. None of that applies here, and using them would require the paid Blaze plan for outbound network access. Deliberately not used in v1.
+Cloud Functions (Node, deployed to GCP) exist for work that *can't* be trusted to the client — payment processing, secret-holding API calls, reacting to database writes server-side. None of that applies *yet*, and using them would require the paid Blaze plan for outbound network access. Deliberately not used in v1.
+
+**This is a v1 stance, not a permanent one.** Background generation, server-side stats and anything AI-backed all need code running somewhere trusted, and all three are planned — see **§7.4**, which also lists the constraints v1 must honour so that backend can be added without unpicking the client. Note that §7.4 favours a standalone service over Cloud Functions, so the "no Cloud Functions" position survives the arrival of a backend.
 
 ### 7.2 Hosting on Cloudflare Pages
 
@@ -241,17 +251,53 @@ Local development against the Emulator Suite is unaffected — that's SDK config
 
 **Apple sign-in: rejected for v1.** Sign in with Apple for web requires a Services ID and signing key from the Apple Developer Program (~£79/yr) — not justifiable for a two-person app. Revisit only if the Capacitor route is ever taken, where App Store rules would require it.
 
+### 7.4 Backend API (planned — v2)
+
+**A backend is a committed part of this project's direction, not a hypothetical.** It is deliberately not built in v1, because none of v1's work needs it and Firestore-direct keeps the client simple. But v1 makes its design decisions on the assumption that the backend arrives, so the move is **additive** — a second writer alongside the client — rather than a rewrite of the data layer.
+
+**What it is eventually for:**
+
+- **Background jobs.** Plan generation moves off the device, so a week can be generated without the app being open and foregrounded.
+- **Stat calculation.** Aggregations over accumulated history (§8 M3 insights) that get slower as history grows, and that both members should see identical results for.
+- **AI.** The forcing function. Anything model-backed needs an API key, and a key cannot ship in a static bundle — this is the one feature that *requires* a backend rather than merely benefiting from one.
+
+**What moves, and what does not:**
+
+| | Where it ends up |
+|---|---|
+| `generatePlan`, `buildShoppingList`, stats aggregations | **Move** — lifted into a shared workspace package, imported by both client and server |
+| Meal / ingredient CRUD, tick-off, shopping ticks | **Stay client→Firestore.** Low-latency, offline-capable, already correct. Routing them through an API would lose offline writes for nothing |
+| Security rules | **Stay, and stay authoritative.** The backend is an additional privileged writer; it never becomes an excuse to loosen the rules the client is held to |
+
+So Firestore remains the database and the client keeps talking to it directly. The backend is a second participant, not a gateway.
+
+**Design constraints v1 must honour.** Each of these is cheap now and expensive to retrofit:
+
+1. **Generation is asynchronous at the store boundary.** `draftWeek` returns a promise that resolves when the write lands — it does **not** return the generated result. Screens learn the outcome by observing the WeekPlan document (including its `thin` and `status`), never from a return value. A background job has no return value; a UI that depends on one has to be rewritten to accept the backend.
+2. **The store interface is the seam.** All reads and writes go through `useLarder()`. Screens never import Firestore directly and never learn where data comes from. Swapping a client-side call for a server call is then a change in one file.
+3. **Pure modules stay pure and stay portable** (§4) — no Firebase, DOM or ambient-clock imports. They belong in a workspace package (`packages/core`) that a server can import unchanged.
+4. **Authorization must be readable by a server.** A backend verifies a Firebase ID token and then needs to answer "is this user in this household?" The household document's `memberUids[]` answers that with a single read and no Admin SDK. A `householdId` **custom claim** does not travel as well — it requires the Admin SDK to set and only refreshes on token renewal. This is why §3 settles on `memberUids` — the backend is the reason the choice is not arbitrary.
+5. **Plan documents model in-flight work.** `status` and `thin` as specified in §3 — the UI can already render a plan that is being generated elsewhere.
+
+**Hosting — decided at the time, with one known trap.** Cloudflare Workers is the natural fit given Pages hosting, but the **Firebase Admin SDK is Node-targeted and does not run cleanly on Workers**. The realistic options are the Firestore REST API with a service-account JWT signed via WebCrypto (works, more code), or a Node host (Fly / Render / Cloud Run) where the Admin SDK runs as-is. Not a v1 decision — but not a three-line one either, so it should not be assumed away when planning the work.
+
+**Explicitly still out of scope for v1:** no `/api` stub, no speculative abstraction over Firestore, no request/response types written ahead of a consumer. The five constraints above are the whole of the preparation. Indirection added now in anticipation would cost more than the eventual migration.
+
+**Unchanged by any of this:** §4's rule that outcome data never feeds generation. Moving the generator to a server does not make adaptive generation an implementation detail — it stays an explicit product decision.
+
 ## 8. Milestones
 
 **M0 — Auth spike (half a day):** prove Google `signInWithPopup` works from an installed iOS home-screen PWA on Cloudflare Pages (§7.3). Determines whether auth is three lines or needs a Pages Function proxy. Do this before writing app code.
 **M1 — Usable core:** project scaffold, emulator + seed script, household-scoped Firestore schema and security rules, meal CRUD, week generation with variety + season rules, swap, text shopping list, tick-off tracking with skip reasons and portion feedback. Capture lands in M1 even though the insights view is M3 — the data has to accumulate for months before it says anything useful, so recording it late is recording it never. Single member, but the household structure is already in place.
-**M2 — Shared:** Firebase Auth, `householdId` custom claim, invite/join a second member, plan history feeding recency rules.
+**M2 — Shared:** Firebase Auth, `memberUids`-based security rules (§3), invite/join a second member, plan history feeding recency rules.
 **M3 — Polish & insights:** locked slots, effort-based weekday weighting, ingredient grouping, and a simple **waste insights view** — read-only reporting over accumulated outcome data:
 
 - **Portion warnings:** meals rated `too_much` on a majority of rated cooks, with a minimum threshold of 3 rated cooks before anything is surfaced. Below that, one heavy night would trigger bad advice. Presented as "Chicken fajitas — too much 4 of 5 times. Consider reducing quantities," linking straight to the meal edit screen.
 - **Skip patterns:** which meals get planned but never cooked, which days of the week reliably get skipped, and the breakdown of skip reasons.
 
 Purely informational. It changes your quantities and your buying habits; it never changes the algorithm.
+
+**M4 — Backend API:** the planned backend of §7.4. Extract the pure modules into a shared workspace package, stand up the service, move plan generation to a background job and stat aggregation server-side, then build on it (AI being the first thing that genuinely requires it). Scheduled after M3 because M1–M3 need no server — but M1's store boundary, async `draftWeek`, and WeekPlan `status`/`thin` fields exist specifically so this milestone is additive work rather than a rewrite.
 
 ## 9. Decisions log
 
@@ -268,8 +314,13 @@ No open questions remain for v1.
 | Skip data in generation | Recorded and reported, never fed back into the generator |
 | Framework | Vite + React + TypeScript PWA |
 | Hosting | Cloudflare Pages |
-| Backend | Firebase — Firestore + Auth, no Cloud Functions, no server-side code |
+| Backend (v1) | Firebase — Firestore + Auth, no Cloud Functions, no server-side code |
+| Backend (v2) | **Planned, not hypothetical** — a standalone API for background jobs, server-side stats and AI (§7.4, M4). v1 honours five constraints so it lands additively |
+| Backend hosting | Deferred to M4. Cloudflare Workers can't run the Firebase Admin SDK cleanly — either Firestore REST + WebCrypto-signed JWT, or a Node host |
+| Generation call shape | Async at the store boundary from v1; results observed on the WeekPlan doc, never returned from the call |
+| Household authorization | `memberUids[]` on the household doc, not a `householdId` custom claim — no Admin SDK, and a backend can read it |
+| Data access | Client→Firestore direct stays for CRUD even after M4; the backend is a second writer, not a gateway |
 | Auth | Google sign-in only, `signInWithPopup`. Apple rejected on cost |
 | Notifications | Out of scope |
 
-**Deferred, not rejected:** effort-based weekday weighting (M3), ingredient photo storage, Capacitor wrapper for native features. Adaptive generation from outcome history remains off the table pending an explicit future decision.
+**Deferred, not rejected:** effort-based weekday weighting (M3), backend API (M4 — see §7.4), ingredient photo storage, Capacitor wrapper for native features. Adaptive generation from outcome history remains off the table pending an explicit future decision.

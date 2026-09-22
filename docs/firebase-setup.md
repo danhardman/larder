@@ -79,6 +79,13 @@ Select **Firestore** and **Emulators**. When prompted:
 This writes `firebase.json`, `.firebaserc`, `firestore.rules` and
 `firestore.indexes.json`. Commit all of them — `.firebaserc` only holds the project ID.
 
+The emulators need a Java runtime (macOS ships only a stub `java`):
+
+```sh
+brew install openjdk
+echo 'export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"' >> ~/.zshrc
+```
+
 Run with:
 
 ```sh
