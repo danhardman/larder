@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react'
+import { ChipRow } from '../../components/ChipRow'
 import { CloseIcon } from '../../components/icons'
-import type { Household, Invite } from '../../types'
+import type { Household, Invite, Settings } from '../../types'
+import { RECENCY_WINDOWS, ROTATION_SIZES } from '../../types/settings'
 
 interface SettingsScreenProps {
   household: Household
+  settings: Settings
   invites: Invite[]
   currentUid: string
   accountName: string
@@ -12,15 +15,13 @@ interface SettingsScreenProps {
   onInvite: (email: string) => string | null
   onRevoke: (email: string) => void
   onSignOut: () => void
+  onChangeSettings: (changes: Partial<Settings>) => void
 }
 
-/**
- * Household members, pending invites, and the account. The recency-window and
- * rotation-size controls (spec §6) arrive in Stage 5 and go above the members
- * section.
- */
+/** Planning knobs (spec §6), household members, pending invites, and the account. */
 export function SettingsScreen({
   household,
+  settings,
   invites,
   currentUid,
   accountName,
@@ -28,6 +29,7 @@ export function SettingsScreen({
   onInvite,
   onRevoke,
   onSignOut,
+  onChangeSettings,
 }: SettingsScreenProps) {
   const [email, setEmail] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
@@ -52,6 +54,23 @@ export function SettingsScreen({
         <div className="font-heading text-[30px] leading-none">Settings</div>
         <div className="mt-[7px] text-[13px] font-medium text-neutral-600">{household.name}</div>
       </div>
+
+      <Section title="Planning">
+        <ChipRow
+          label="Breakfast & lunch rotation"
+          hint="How many different breakfasts and lunches a week cycles through."
+          options={ROTATION_SIZES.map((n) => ({ value: n, label: String(n) }))}
+          value={settings.rotationSize}
+          onChange={(rotationSize) => onChangeSettings({ rotationSize })}
+        />
+        <ChipRow
+          label="Avoid recent dinners"
+          hint="Dinners from the last few accepted weeks are pushed down when generating."
+          options={RECENCY_WINDOWS.map((n) => ({ value: n, label: n === 0 ? 'Off' : n === 1 ? '1 wk' : `${n} wks` }))}
+          value={settings.recencyWindowWeeks}
+          onChange={(recencyWindowWeeks) => onChangeSettings({ recencyWindowWeeks })}
+        />
+      </Section>
 
       <Section title="Members">
         <ul className="flex flex-col divide-y divide-divider">

@@ -324,7 +324,8 @@ Spec §6. `recencyWindowWeeks` and `rotationSize` are already plumbed end-to-end
 `updateSettings` exists in `src/state/store.tsx` but **is never called by anything**. Mostly a form.
 
 - ~~Fourth tab, household members list, sign-out~~ — done in Stage 3 (`src/features/settings/`).
-- Recency window + rotation size controls on that screen, above the members section.
+- ~~Recency window + rotation size controls on that screen, above the members section~~ — done: chip rows
+  (rotation 1–3, recency Off/1–4 wks) in a Planning section; rules still don't range-check `settings`.
 
 **Review:** set rotation size to 1, regenerate a week, confirm breakfasts stop varying.
 

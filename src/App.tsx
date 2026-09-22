@@ -111,6 +111,7 @@ export default function App() {
           {screen === 'settings' && (
             <SettingsScreen
               household={store.household}
+              settings={store.settings}
               invites={invites.invites}
               currentUid={user?.uid ?? ''}
               accountName={user?.displayName || user?.email || 'Signed in'}
@@ -118,6 +119,7 @@ export default function App() {
               onInvite={invites.inviteMember}
               onRevoke={invites.revokeInvite}
               onSignOut={signOutOfLarder}
+              onChangeSettings={store.updateSettings}
             />
           )}
 
