@@ -6,7 +6,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth'
-import { auth, googleProvider } from '../lib/firebase'
+import { auth, googleProvider } from './firebase'
 import type { ReactNode } from 'react'
 
 export type AuthError = { code: string; message: string }

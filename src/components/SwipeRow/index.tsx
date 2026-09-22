@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { rubberBand, settleOpen, SWIPE_SLOP } from '../lib/swipe'
+import { rubberBand, settleOpen, SWIPE_SLOP } from './swipeGesture'
 
 interface SwipeRowProps {
   /** Controlled by the list, so only one row is ever open. */

@@ -1,5 +1,13 @@
+/**
+ * Per-meal history derived from accepted weeks (spec §8): how often a meal was
+ * cooked, skipped, and rated too much or not enough. Feeds the library's portion
+ * warnings and the delete guard. Purely informational — never fed back into
+ * the generator (spec §4).
+ */
+
 import type { WeekPlan } from '../types'
 
+/** Outcome counts for one meal across every accepted week. */
 export interface MealStats {
   timesCooked: number
   timesTooMuch: number
@@ -59,6 +67,10 @@ export function mealsInUse(plans: WeekPlan[]): Set<string> {
 /** Minimum rated cooks before any advice — below this one heavy night misleads. */
 const MIN_RATED_COOKS = 3
 
+/**
+ * Advice for the meal editor and library card, or null. Warns when a majority
+ * of rated cooks went one way — but only once there are enough ratings to trust.
+ */
 export function portionWarning(stats: MealStats | undefined): string | null {
   if (!stats || stats.timesRated < MIN_RATED_COOKS) return null
   if (stats.timesTooMuch * 2 > stats.timesRated) {

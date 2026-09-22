@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rubberBand, settleOpen } from './swipe'
+import { rubberBand, settleOpen } from './swipeGesture'
 
 const TRAY = 150
 

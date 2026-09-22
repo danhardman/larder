@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { portionWarning, type MealStats } from '../lib/stats'
-import type { Meal } from '../types'
-import { SwipeAction, SwipeRow } from '../components/SwipeRow'
-import { AlertIcon, ArchiveIcon, SearchIcon, TrashIcon, UndoIcon } from '../components/icons'
+import { portionWarning, type MealStats } from '../../lib/stats'
+import type { Meal } from '../../types'
+import { SwipeAction, SwipeRow } from '../../components/SwipeRow'
+import { AlertIcon, ArchiveIcon, SearchIcon, TrashIcon, UndoIcon } from '../../components/icons'
 
 interface LibraryScreenProps {
   meals: Meal[]

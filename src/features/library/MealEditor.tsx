@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { newId } from '../lib/storage'
-import { round1 } from '../lib/shoppingList'
+import { newId } from '../../state/storage'
+import { round1 } from '../../lib/shoppingList'
 import {
   CARB_BASES,
   MEAL_TYPES,
@@ -14,8 +14,8 @@ import {
   type Protein,
   type Season,
   type Unit,
-} from '../types'
-import { ArchiveIcon, ArrowLeftIcon, MinusIcon, PlusIcon, TrashIcon, UndoIcon } from './icons'
+} from '../../types'
+import { ArchiveIcon, ArrowLeftIcon, MinusIcon, PlusIcon, TrashIcon, UndoIcon } from '../../components/icons'
 
 interface MealEditorProps {
   meal: Meal | null

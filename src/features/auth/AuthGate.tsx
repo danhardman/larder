@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { SignInScreen } from '../screens/SignInScreen'
-import { useAuth } from '../state/auth'
+import { SignInScreen } from './SignInScreen'
+import { useAuth } from '../../state/auth'
 import type { ReactNode } from 'react'
 
 /** Gates the whole app behind a signed-in Google account (spec §7.3, M0).

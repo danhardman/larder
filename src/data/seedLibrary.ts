@@ -1,3 +1,8 @@
+/**
+ * The starter library a new household gets. Data, not logic: `state/storage.ts`
+ * loads it on first run, and the Stage 2 seed script writes it to the emulator.
+ */
+
 import type { CarbBase, Meal, MealIngredient, MealType, Protein, Season, Unit } from '../types'
 import { SEASONS } from '../types'
 

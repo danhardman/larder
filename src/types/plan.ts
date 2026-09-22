@@ -1,41 +1,6 @@
-export type MealType = 'breakfast' | 'lunch' | 'dinner'
-export type Protein = 'chicken' | 'beef' | 'pork' | 'fish' | 'veg' | 'other' | 'none'
-export type CarbBase = 'pasta' | 'rice' | 'potato' | 'bread' | 'grain' | 'none'
-export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
-export type Unit = 'g' | 'kg' | 'ml' | 'l' | 'piece' | 'pack' | 'tin' | 'bunch' | 'other'
-export type Effort = 'quick' | 'normal' | 'involved'
+/** A planned week: seven days of slots, and what actually happened to each. */
 
-export const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner']
-export const PROTEINS: Protein[] = ['chicken', 'beef', 'pork', 'fish', 'veg', 'other', 'none']
-export const CARB_BASES: CarbBase[] = ['pasta', 'rice', 'potato', 'bread', 'grain', 'none']
-export const SEASONS: Season[] = ['spring', 'summer', 'autumn', 'winter']
-export const UNITS: Unit[] = ['g', 'kg', 'ml', 'l', 'piece', 'pack', 'tin', 'bunch', 'other']
-
-export interface MealIngredient {
-  ingredientId: string
-  /** Denormalised copy of the catalog name, so a meal renders in one read. */
-  name: string
-  quantity: number
-  unit: Unit
-}
-
-export interface Meal {
-  id: string
-  name: string
-  mealTypes: MealType[]
-  protein: Protein
-  carbBase: CarbBase
-  seasons: Season[]
-  ingredients: MealIngredient[]
-  effort?: Effort
-  archived: boolean
-}
-
-export interface Ingredient {
-  id: string
-  name: string
-  nameLower: string
-}
+import type { MealType } from './meal'
 
 export type Outcome = 'pending' | 'eaten' | 'skipped'
 export type SkipReason = 'ate_out' | 'takeaway' | 'at_friends' | 'other'
@@ -65,10 +30,7 @@ export interface WeekPlan {
   seed: number
 }
 
-export interface Settings {
-  recencyWindowWeeks: number
-  rotationSize: number
-}
+/* Labels live with the enums they describe so a new value can't be added without one. */
 
 export const SKIP_REASONS: { value: SkipReason; label: string }[] = [
   { value: 'ate_out', label: 'We ate out' },

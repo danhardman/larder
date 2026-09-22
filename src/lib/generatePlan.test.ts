@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { generatePlan, eligible, rerollSlot } from './generatePlan'
 import { rngFrom } from './rng'
-import { SEED_MEALS } from './seedLibrary'
+import { SEED_MEALS } from '../data/seedLibrary'
 import type { Meal, Slot, WeekPlan } from '../types'
 
 const base = {

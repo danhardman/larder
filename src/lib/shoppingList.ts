@@ -1,5 +1,11 @@
+/**
+ * The shopping list (spec §5): what to buy for a week, summed across meals,
+ * with a per-meal breakdown so you can see why. Pure; `features/shopping` renders it.
+ */
+
 import type { Meal, Slot, Unit } from '../types'
 
+/** One meal's share of a shopping line. */
 export interface Contribution {
   mealName: string
   /** Amount this meal calls for on its own. */
@@ -8,6 +14,7 @@ export interface Contribution {
   times: number
 }
 
+/** One thing to buy: an ingredient in one unit, summed across the week. */
 export interface ShoppingLine {
   name: string
   unit: Unit
@@ -15,6 +22,7 @@ export interface ShoppingLine {
   contributions: Contribution[]
 }
 
+/** Round to one decimal place, for displaying quantities without float noise. */
 export function round1(n: number): number {
   return Math.round(n * 10) / 10
 }
@@ -48,12 +56,14 @@ export function buildShoppingList(slots: Slot[], meals: Meal[]): ShoppingLine[] 
   return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
+/** One meal's share of a line, e.g. "Chilli ×2 (400 g each)" — shown under each line. */
 export function formatContribution(c: Contribution, unit: Unit): string {
   return c.times > 1
     ? `${c.mealName} ×${c.times} (${round1(c.each)} ${unit} each)`
     : `${c.mealName} ${round1(c.each)} ${unit}`
 }
 
+/** The whole list as plain text for the clipboard, headed by the week. */
 export function formatShoppingList(lines: ShoppingLine[], weekLabel: string): string {
   const body = lines
     .map((line) => {

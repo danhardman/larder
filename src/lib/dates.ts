@@ -1,30 +1,17 @@
-import type { Season } from '../types'
+/**
+ * Calendar arithmetic and display formatting for the week-based UI.
+ *
+ * Weeks start on Monday (day 0) everywhere in the app, and a week is keyed by
+ * the ISO date of its Monday. Dates are handled in local time, never UTC: a
+ * plan is for the household's Monday, not the server's.
+ */
 
+/** Monday-first day names, indexed by `Slot.day`. */
 export const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-export const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** Northern hemisphere, hard-coded. One function so a hemisphere flag has one home. */
-export function seasonForMonth(month: number): Season {
-  if (month >= 2 && month <= 4) return 'spring'
-  if (month >= 5 && month <= 7) return 'summer'
-  if (month >= 8 && month <= 10) return 'autumn'
-  return 'winter'
-}
-
-export function currentSeason(today = new Date()): Season {
-  return seasonForMonth(today.getMonth())
-}
-
-/**
- * The season of the week a plan covers, not today's — drafting in late February
- * for a March week must pick spring meals. A week straddling a month boundary
- * takes the month it starts in.
- */
-export function seasonForWeek(weekStart: Date): Season {
-  return seasonForMonth(weekStart.getMonth())
-}
-
+/** The Monday of the week containing `date`, at local midnight. */
 export function startOfWeek(date: Date): Date {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   // getDay() is Sunday-first; we want Monday as day 0.
@@ -33,22 +20,26 @@ export function startOfWeek(date: Date): Date {
   return d
 }
 
+/** `date` plus `days`, at local midnight. Negative values go backwards. */
 export function addDays(date: Date, days: number): Date {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   d.setDate(d.getDate() + days)
   return d
 }
 
+/** `date` plus `weeks`, at local midnight. */
 export function addWeeks(date: Date, weeks: number): Date {
   return addDays(date, weeks * 7)
 }
 
+/** Local-date ISO string ("2026-09-21") — the key format for `store.plans`. */
 export function toISODate(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${date.getFullYear()}-${m}-${d}`
 }
 
+/** Inverse of `toISODate`. Parses as a local date, not UTC. */
 export function fromISODate(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number)
   return new Date(y, m - 1, d)
@@ -64,7 +55,7 @@ export function formatDayWithName(date: Date): string {
   return `${DAY_SHORT[date.getDay() === 0 ? 6 : date.getDay() - 1]} ${formatDay(date)}`
 }
 
-/** "17 – 23 Aug", collapsing the month when both ends share one. */
+/** "17 – 23 Aug", collapsing the month when both ends share one. Used on week cards and list headers. */
 export function formatWeekRange(weekStart: Date): string {
   const end = addDays(weekStart, 6)
   if (weekStart.getMonth() === end.getMonth()) {
@@ -73,7 +64,7 @@ export function formatWeekRange(weekStart: Date): string {
   return `${formatDay(weekStart)} – ${formatDay(end)}`
 }
 
-/** Index of today within its week, Monday = 0. Null when the week isn't the current one. */
+/** Index of today within the week starting `weekStart`, Monday = 0. Null when that isn't the current week. */
 export function todayIndex(weekStart: Date, today = new Date()): number | null {
   const start = startOfWeek(today)
   if (toISODate(start) !== toISODate(weekStart)) return null

@@ -1,5 +1,5 @@
-import { formatContribution, round1, type ShoppingLine } from '../lib/shoppingList'
-import { CopyIcon } from '../components/icons'
+import { formatContribution, round1, type ShoppingLine } from '../../lib/shoppingList'
+import { CopyIcon } from '../../components/icons'
 
 interface ShoppingScreenProps {
   /** Null when no week has been accepted yet. */

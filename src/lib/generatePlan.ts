@@ -1,6 +1,13 @@
+/**
+ * The plan generator (spec §4): turns a meal library plus recent history into a
+ * week of slots. Pure and seeded — the same inputs always give the same week.
+ * Called by the store to draft a week and by `features/weeks` to re-roll a slot.
+ */
+
 import { rngFrom, shuffled, type Rng } from './rng'
 import { MEAL_TYPES, type Meal, type MealType, type Season, type Slot, type WeekPlan } from '../types'
 
+/** What the generator needs; the store assembles this from household state. */
 export interface GenerateInput {
   library: Meal[]
   /** Accepted weeks, most recent first or not — order doesn't matter. */
@@ -13,6 +20,7 @@ export interface GenerateInput {
   keep?: Slot[]
 }
 
+/** A full week of slots plus any meal types the library was too thin to fill well. */
 export interface GenerateResult {
   slots: Slot[]
   /** Meal types the library couldn't comfortably cover, e.g. ['breakfasts']. */

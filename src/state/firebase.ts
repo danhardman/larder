@@ -1,3 +1,9 @@
+/**
+ * Firebase app and auth initialisation from the `VITE_FIREBASE_*` env vars.
+ * The one place the SDK is configured; `state/auth.tsx` consumes `auth` and
+ * `googleProvider`, and Stage 2 adds Firestore here.
+ */
+
 import { initializeApp, type FirebaseOptions } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 
@@ -19,9 +25,12 @@ export const missingConfig = Object.entries(config)
   .filter(([, value]) => !value)
   .map(([key]) => key)
 
+/** The initialised app; Firestore attaches to this in Stage 2. */
 export const app = initializeApp(config)
+/** Auth instance consumed by `state/auth.tsx`. */
 export const auth = getAuth(app)
 
+/** Google sign-in, the only provider the household uses. */
 export const googleProvider = new GoogleAuthProvider()
 // Always show the chooser — signing in as the wrong account on a shared household
 // is the confusing failure, not an extra tap.

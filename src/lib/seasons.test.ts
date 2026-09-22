@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fromISODate, seasonForMonth, seasonForWeek } from './dates'
+import { fromISODate } from './dates'
+import { seasonForMonth, seasonForWeek } from './seasons'
 
 describe('seasonForMonth', () => {
   it('maps the northern-hemisphere calendar', () => {

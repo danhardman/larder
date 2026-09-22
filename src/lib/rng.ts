@@ -1,3 +1,9 @@
+/**
+ * Seeded randomness for the planner. A plan stores its seed, so a baffling
+ * week can be regenerated exactly and reasoned about.
+ */
+
+/** A generator returning a float in [0, 1), like `Math.random`. */
 export type Rng = () => number
 
 /** mulberry32 — small, fast, and deterministic for a given seed. */
@@ -11,6 +17,7 @@ export function rngFrom(seed: number): Rng {
   }
 }
 
+/** A shuffled copy (Fisher–Yates) drawn from `rng`; the input is left alone. */
 export function shuffled<T>(items: readonly T[], rng: Rng): T[] {
   const out = items.slice()
   for (let i = out.length - 1; i > 0; i--) {
@@ -20,6 +27,7 @@ export function shuffled<T>(items: readonly T[], rng: Rng): T[] {
   return out
 }
 
+/** A fresh seed for a new draft. The only place the planner touches `Math.random`. */
 export function randomSeed(): number {
   return Math.floor(Math.random() * 1e9)
 }

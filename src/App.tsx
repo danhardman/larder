@@ -1,259 +1,57 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { BottomSheet, SheetRow } from './components/BottomSheet'
-import { MealEditor } from './components/MealEditor'
+import { useState } from 'react'
+import { PlusIcon } from './components/icons'
 import { TabBar, type Screen } from './components/TabBar'
 import { Toast } from './components/Toast'
-import { ArrowRightIcon, PlusIcon, ShuffleIcon } from './components/icons'
-import {
-  addWeeks,
-  DAY_NAMES,
-  formatDay,
-  formatWeekRange,
-  fromISODate,
-  seasonForWeek,
-  startOfWeek,
-  toISODate,
-} from './lib/dates'
-import { eligible, rerollSlot } from './lib/generatePlan'
-import { rngFrom } from './lib/rng'
-import { buildShoppingList, formatShoppingList } from './lib/shoppingList'
-import { portionWarning } from './lib/stats'
-import { newId } from './lib/storage'
-import { LibraryScreen } from './screens/LibraryScreen'
-import { ShoppingScreen } from './screens/ShoppingScreen'
-import { WeeksScreen, type WeekView } from './screens/WeeksScreen'
+import { DeleteMealSheet } from './features/library/DeleteMealSheet'
+import { LibraryScreen } from './features/library/LibraryScreen'
+import { MealEditor } from './features/library/MealEditor'
+import { useLibrary } from './features/library/useLibrary'
+import { ShoppingScreen } from './features/shopping/ShoppingScreen'
+import { useShopping } from './features/shopping/useShopping'
+import { DraftActionBar } from './features/weeks/DraftActionBar'
+import { SlotSheet, type SheetTarget } from './features/weeks/SlotSheet'
+import { useSlotActions } from './features/weeks/useSlotActions'
+import { useWeeks } from './features/weeks/useWeeks'
+import { WeeksScreen } from './features/weeks/WeeksScreen'
 import { useLarder } from './state/store'
-import { SKIP_REASONS, type Meal, type PortionFeedback, type SkipReason } from './types'
-import type { WeekCard } from './components/WeekStrip'
+import { useToast } from './state/toast'
 
-type SheetTarget = {
-  weekStart: string
-  index: number
-  scope: 'live' | 'draft'
-  mode: 'actions' | 'pick' | 'skip' | 'skip-note'
-}
+/** Index into the week strip for next week — where "plan next week" lands. */
+const NEXT_WEEK = 2
 
-const CHIP = {
-  accent: 'bg-accent-200 text-accent-800',
-  sage: 'bg-sage-200 text-sage-800',
-  neutral: 'bg-neutral-300 text-neutral-800',
-}
-
+/**
+ * The shell: which tab is showing, which overlay is open, and the wiring
+ * between features. Each feature owns its own state in a hook; App only
+ * composes them and handles the hand-offs that cross feature boundaries.
+ */
 export default function App() {
   const store = useLarder()
+  const { message: toast } = useToast()
 
   const [screen, setScreen] = useState<Screen>('weeks')
-  const [weekIndex, setWeekIndex] = useState(1)
   const [sheet, setSheet] = useState<SheetTarget | null>(null)
-  const [portionFor, setPortionFor] = useState<{ weekStart: string; index: number } | null>(null)
-  const [editor, setEditor] = useState<{ meal: Meal | null } | null>(null)
-  const [query, setQuery] = useState('')
-  const [showArchived, setShowArchived] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState<Meal | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
-  const [thinHint, setThinHint] = useState<string | null>(null)
-  const [skipNote, setSkipNote] = useState('')
-  const [copied, setCopied] = useState(false)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  useEffect(() => () => clearTimeout(toastTimer.current), [])
+  const weeks = useWeeks()
+  const slots = useSlotActions({ onAccepted: () => setScreen('shop') })
+  const shopping = useShopping(weeks.weeks)
+  const library = useLibrary({ onSaved: () => setScreen('library') })
 
-  const say = (message: string) => {
-    clearTimeout(toastTimer.current)
-    setToast(message)
-    toastTimer.current = setTimeout(() => setToast(null), 2600)
+  const goTo = (next: Screen) => {
+    setScreen(next)
+    slots.dismissPortion()
   }
 
-  const weeks: WeekView[] = useMemo(() => {
-    const thisMonday = startOfWeek(new Date())
-    return [-1, 0, 1].map((offset) => {
-      const start = addWeeks(thisMonday, offset)
-      const iso = toISODate(start)
-      return { offset, start, iso, plan: store.plans[iso] }
-    })
-  }, [store.plans])
-
-  const week = weeks[weekIndex]
-  // Every season decision is about a specific week, never about today.
-  const weekSeason = seasonForWeek(week.start)
-
-  const cards: WeekCard[] = weeks.map((w) => {
-    const plan = w.plan
-    const kicker = w.offset < 0 ? 'Last week' : w.offset === 0 ? 'This week' : 'Next week'
-    const range = formatWeekRange(w.start)
-    if (!plan) {
-      return {
-        key: w.iso,
-        kicker,
-        range,
-        chip: w.offset < 0 ? 'No plan' : 'Not planned',
-        chipClass: w.offset < 0 ? CHIP.neutral : CHIP.accent,
-        meta: w.offset < 0 ? 'Nothing recorded' : 'Tap to plan',
-      }
-    }
-    if (w.offset < 0) {
-      const eaten = plan.slots.filter((s) => s.outcome === 'eaten').length
-      const skipped = plan.slots.filter((s) => s.outcome === 'skipped').length
-      return {
-        key: w.iso,
-        kicker,
-        range,
-        chip: 'Done',
-        chipClass: CHIP.neutral,
-        meta: `${eaten} eaten · ${skipped} skipped`,
-      }
-    }
-    if (plan.status === 'draft') {
-      return {
-        key: w.iso,
-        kicker,
-        range,
-        chip: 'Draft',
-        chipClass: CHIP.accent,
-        meta: 'Review before shopping',
-      }
-    }
-    const done = plan.slots.filter((s) => s.outcome !== 'pending').length
-    return {
-      key: w.iso,
-      kicker,
-      range,
-      chip: w.offset === 0 ? 'Shopped' : 'Locked in',
-      chipClass: CHIP.sage,
-      meta: w.offset === 0 ? `${done} of ${plan.slots.length} ticked` : 'List ready',
-    }
-  })
-
-  /* ── Shopping ─────────────────────────────────────────────────────────── */
-
-  const shoppingWeek =
-    weeks.find((w) => w.offset === 1 && w.plan?.status === 'accepted') ??
-    weeks.find((w) => w.offset === 0 && w.plan?.status === 'accepted') ??
-    null
-
-  const shoppingLines = shoppingWeek?.plan
-    ? buildShoppingList(shoppingWeek.plan.slots, store.meals)
-    : null
-
-  const copyList = () => {
-    if (!shoppingLines || !shoppingWeek) return
-    const text = formatShoppingList(shoppingLines, formatDay(shoppingWeek.start))
-    navigator.clipboard?.writeText(text).catch(() => {})
-    setCopied(true)
-    say('Copied — go forth and shop.')
-    setTimeout(() => setCopied(false), 2600)
-  }
-
-  /* ── Slot actions ─────────────────────────────────────────────────────── */
-
-  const markEaten = (weekStart: string, index: number) => {
-    store.patchSlot(weekStart, index, { outcome: 'eaten', skipReason: null })
+  const selectWeek = (index: number) => {
+    weeks.selectWeek(index)
     setSheet(null)
-    setPortionFor({ weekStart, index })
+    slots.dismissPortion()
   }
-
-  const markSkipped = (weekStart: string, index: number, reason: SkipReason, note?: string) => {
-    store.patchSlot(weekStart, index, {
-      outcome: 'skipped',
-      skipReason: reason,
-      // Empty stays null rather than '', so "has a note" is one truthy check.
-      skipNote: note?.trim() || null,
-      portionFeedback: null,
-    })
-    setSheet(null)
-    const label = SKIP_REASONS.find((r) => r.value === reason)?.label ?? 'Skipped'
-    say(`Noted — ${label.toLowerCase()}.`)
-  }
-
-  const setPortion = (weekStart: string, index: number, value: PortionFeedback, label: string) => {
-    store.patchSlot(weekStart, index, { portionFeedback: value })
-    setPortionFor(null)
-    say(`Logged: ${label.toLowerCase()}.`)
-  }
-
-  const reroll = (weekStart: string, index: number) => {
-    const plan = store.planFor(weekStart)
-    if (!plan) return
-    const pick = rerollSlot(
-      plan.slots,
-      index,
-      store.meals,
-      seasonForWeek(fromISODate(plan.weekStart)),
-      rngFrom(Date.now() >>> 0),
-    )
-    setSheet(null)
-    if (!pick) {
-      say('Library’s a bit thin there — add another one?')
-      return
-    }
-    store.patchSlot(weekStart, index, { mealId: pick.id, mealName: pick.name })
-    say(`${pick.name} it is.`)
-  }
-
-  const draftWeek = (weekStart: string) => {
-    const { thin } = store.draftWeek(weekStart)
-    const drafted = seasonForWeek(fromISODate(weekStart))
-    setThinHint(
-      thin.length ? `Your library’s a bit thin for ${drafted} ${thin[0]} — worth adding one or two.` : null,
-    )
-    say('Here’s a draft — have a look before we shop.')
-  }
-
-  const acceptWeek = (weekStart: string) => {
-    store.acceptWeek(weekStart)
-    setSheet(null)
-    setScreen('shop')
-    say('Locked in — list’s ready.')
-  }
-
-  /* ── Sheet content ────────────────────────────────────────────────────── */
 
   const sheetPlan = sheet ? store.planFor(sheet.weekStart) : undefined
-  const sheetSlot = sheet && sheetPlan ? sheetPlan.slots[sheet.index] : null
-
-  const candidates = useMemo(() => {
-    if (!sheet || !sheetPlan || !sheetSlot) return []
-    const used = new Set<string>()
-    for (const s of sheetPlan.slots) if (s.day === sheetSlot.day && s.mealId) used.add(s.mealId)
-    if (sheetSlot.mealType === 'dinner') {
-      for (const s of sheetPlan.slots) if (s.mealType === 'dinner' && s.mealId) used.add(s.mealId)
-    }
-    return eligible(
-      store.meals,
-      sheetSlot.mealType,
-      seasonForWeek(fromISODate(sheetPlan.weekStart)),
-    ).filter((m) => m.id === sheetSlot.mealId || !used.has(m.id))
-  }, [sheet, sheetPlan, sheetSlot, store.meals])
-
-  /* ── Library ──────────────────────────────────────────────────────────── */
-
-  const catalog = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const meal of store.meals) {
-      for (const item of meal.ingredients) {
-        if (item.name) counts.set(item.name, (counts.get(item.name) ?? 0) + 1)
-      }
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name)
-  }, [store.meals])
-
-  const archiveMeal = (meal: Meal) => {
-    store.setMealArchived(meal.id, true)
-    setEditor(null)
-    say(`${meal.name} archived — past weeks still count it.`)
-  }
-
-  const restoreMeal = (meal: Meal) => {
-    store.setMealArchived(meal.id, false)
-    setEditor(null)
-    say(`${meal.name} is back in the rotation.`)
-  }
-
+  const { week } = weeks
   const showActionBar =
-    screen === 'weeks' && week.offset >= 0 && week.plan?.status === 'draft' && !sheet && !editor
-  const showFab = screen === 'library' && !editor
-
-  const nextWeekIsDraft = weeks.some((w) => w.offset === 1 && w.plan?.status === 'draft')
+    screen === 'weeks' && week.offset >= 0 && week.plan?.status === 'draft' && !sheet && !library.editing
+  const showFab = screen === 'library' && !library.editing
 
   return (
     <div className="flex h-dvh justify-center overflow-hidden bg-neutral-300">
@@ -261,39 +59,31 @@ export default function App() {
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-[104px]">
           {screen === 'weeks' && (
             <WeeksScreen
-              weeks={weeks}
-              cards={cards}
-              selected={weekIndex}
-              onSelect={(i) => {
-                setWeekIndex(i)
-                setSheet(null)
-                setPortionFor(null)
-              }}
-              seasonLabel={weekSeason}
+              weeks={weeks.weeks}
+              cards={weeks.cards}
+              selected={weeks.weekIndex}
+              onSelect={selectWeek}
+              seasonLabel={weeks.season}
               meals={store.meals}
               stats={store.stats}
-              portionFor={portionFor}
-              thinHint={thinHint}
+              portionFor={slots.portionFor}
+              thinHint={slots.thinHint}
               onOpenSlot={(weekStart, index, scope) =>
                 setSheet({ weekStart, index, scope, mode: 'actions' })
               }
-              onTick={markEaten}
-              onPortion={setPortion}
-              onDismissPortion={() => setPortionFor(null)}
-              onDraft={draftWeek}
-              onAccept={acceptWeek}
-              onReopen={(weekStart) => {
-                store.reopenWeek(weekStart)
-                say('Back to draft — tweak away.')
-              }}
+              onTick={slots.markEaten}
+              onPortion={slots.setPortion}
+              onDismissPortion={slots.dismissPortion}
+              onDraft={slots.draftWeek}
+              onReopen={slots.reopenWeek}
               onGoShop={() => setScreen('shop')}
               onGoWeek={(index) => {
                 setScreen('weeks')
-                setWeekIndex(index)
+                weeks.selectWeek(index)
               }}
               onEditMeal={(meal) => {
                 setScreen('library')
-                setEditor({ meal })
+                library.openEditor(meal)
               }}
             />
           )}
@@ -302,76 +92,55 @@ export default function App() {
             <LibraryScreen
               meals={store.meals}
               stats={store.stats}
-              query={query}
-              onQuery={setQuery}
-              showArchived={showArchived}
-              onShowArchived={setShowArchived}
+              query={library.query}
+              onQuery={library.setQuery}
+              showArchived={library.showArchived}
+              onShowArchived={library.setShowArchived}
               usedMealIds={store.usedMealIds}
-              onEditMeal={(meal) => setEditor({ meal })}
-              onArchive={archiveMeal}
-              onRestore={restoreMeal}
-              onDelete={setConfirmDelete}
+              onEditMeal={library.openEditor}
+              onArchive={library.archiveMeal}
+              onRestore={library.restoreMeal}
+              onDelete={library.requestDelete}
             />
           )}
 
           {screen === 'shop' && (
             <ShoppingScreen
-              lines={shoppingLines}
-              weekLabel={shoppingWeek ? formatWeekRange(shoppingWeek.start) : ''}
-              ticked={shoppingWeek ? (store.ticked[shoppingWeek.iso] ?? {}) : {}}
-              copied={copied}
-              emptyNote={
-                nextWeekIsDraft
-                  ? 'Next week’s still a draft. Lock it in and the list builds itself.'
-                  : 'Draft next week’s meals and the list builds itself from what you plan.'
-              }
-              onToggle={(key) => shoppingWeek && store.toggleTick(shoppingWeek.iso, key)}
-              onCopy={copyList}
+              lines={shopping.lines}
+              weekLabel={shopping.weekLabel}
+              ticked={shopping.ticked}
+              copied={shopping.copied}
+              emptyNote={shopping.emptyNote}
+              onToggle={shopping.toggle}
+              onCopy={shopping.copyList}
               onPlan={() => {
                 setScreen('weeks')
-                setWeekIndex(2)
+                weeks.selectWeek(NEXT_WEEK)
               }}
             />
           )}
         </div>
 
         {showActionBar && (
-          <div className="absolute right-[14px] bottom-20 left-[14px] z-[7] flex gap-2">
-            <button
-              type="button"
-              aria-label="Roll the whole week again"
-              onClick={() => draftWeek(week.iso)}
-              className="btn btn-secondary h-13 w-13 flex-none p-0 shadow-md"
-            >
-              <ShuffleIcon size={19} />
-            </button>
-            <button
-              type="button"
-              onClick={() => acceptWeek(week.iso)}
-              className="btn btn-primary h-13 flex-1 gap-2 text-[15px] font-bold shadow-lg"
-            >
-              Looks good — build the list
-              <ArrowRightIcon size={16} />
-            </button>
-          </div>
+          <DraftActionBar
+            onRedraft={() => slots.draftWeek(week.iso)}
+            onAccept={() => slots.acceptWeek(week.iso)}
+          />
         )}
 
         <TabBar
           screen={screen}
           dots={{
-            weeks: weeks.some((w) => w.offset === 1 && !w.plan),
-            shop: !!shoppingLines,
+            weeks: weeks.weeks.some((w) => w.offset === 1 && !w.plan),
+            shop: !!shopping.lines,
           }}
-          onPick={(next) => {
-            setScreen(next)
-            setPortionFor(null)
-          }}
+          onPick={goTo}
         />
 
         {showFab && (
           <button
             type="button"
-            onClick={() => setEditor({ meal: null })}
+            onClick={() => library.openEditor(null)}
             className="btn btn-primary absolute right-[18px] bottom-[88px] z-[7] gap-2 px-5 py-[14px] text-[14.5px] font-bold shadow-lg"
           >
             <PlusIcon size={18} />
@@ -379,208 +148,37 @@ export default function App() {
           </button>
         )}
 
-        {sheet && sheetSlot && (
-          <BottomSheet
-            kicker={`${sheet.scope === 'live' ? 'This week' : 'Planned'} · ${DAY_NAMES[sheetSlot.day]} ${sheetSlot.mealType}`}
-            title={
-              sheet.mode === 'pick'
-                ? `Pick a ${sheetSlot.mealType}`
-                : sheet.mode === 'skip'
-                  ? 'What happened?'
-                  : sheet.mode === 'skip-note'
-                    ? 'Anything to note?'
-                    : sheetSlot.mealName
-            }
-            note={
-              sheet.mode === 'actions' && sheet.scope === 'live'
-                ? 'The shopping’s already done for this week, so the plan stays put — just tell me how it went.'
-                : null
-            }
+        {sheet && sheetPlan && (
+          <SlotSheet
+            target={sheet}
+            plan={sheetPlan}
+            meals={store.meals}
+            actions={slots}
+            onChangeMode={(mode) => setSheet({ ...sheet, mode })}
             onClose={() => setSheet(null)}
-          >
-            {sheet.mode === 'actions' && (
-              <div className="mt-4 flex flex-col gap-[7px]">
-                {sheet.scope === 'live' ? (
-                  <>
-                    <SheetRow
-                      onClick={() => markEaten(sheet.weekStart, sheet.index)}
-                      className="flex items-center gap-3"
-                    >
-                      <span className="text-[15px]">✅</span> We ate it
-                    </SheetRow>
-                    <SheetRow
-                      onClick={() => setSheet({ ...sheet, mode: 'skip' })}
-                      className="flex items-center gap-3"
-                    >
-                      <span className="text-[15px]">🙈</span> We didn’t eat it
-                    </SheetRow>
-                  </>
-                ) : (
-                  <>
-                    <SheetRow
-                      onClick={() => reroll(sheet.weekStart, sheet.index)}
-                      className="flex items-center gap-3"
-                    >
-                      <span className="text-[15px]">🎲</span> Roll something else
-                    </SheetRow>
-                    <SheetRow
-                      onClick={() => setSheet({ ...sheet, mode: 'pick' })}
-                      className="flex items-center gap-3"
-                    >
-                      <span className="text-[15px]">📖</span> Pick from the library
-                    </SheetRow>
-                    <SheetRow
-                      onClick={() => {
-                        store.patchSlot(sheet.weekStart, sheet.index, { locked: !sheetSlot.locked })
-                        setSheet(null)
-                        say(sheetSlot.locked ? 'Unlocked.' : 'Locked — a re-roll won’t touch it.')
-                      }}
-                      className="flex items-center gap-3"
-                    >
-                      <span className="text-[15px]">{sheetSlot.locked ? '🔓' : '🔒'}</span>
-                      {sheetSlot.locked ? 'Unlock this slot' : 'Lock this slot'}
-                    </SheetRow>
-                  </>
-                )}
-              </div>
-            )}
-
-            {sheet.mode === 'pick' && (
-              <div className="mt-[14px] flex flex-col gap-[6px]">
-                {candidates.map((meal) => (
-                  <SheetRow
-                    key={meal.id}
-                    onClick={() => {
-                      store.patchSlot(sheet.weekStart, sheet.index, {
-                        mealId: meal.id,
-                        mealName: meal.name,
-                      })
-                      setSheet(null)
-                      say(`${meal.name} — good shout.`)
-                    }}
-                    className="flex items-center justify-between gap-[10px] rounded-[14px]"
-                  >
-                    <span className="text-[14.5px] font-semibold">{meal.name}</span>
-                    <span className="text-[11px] font-semibold text-neutral-500">
-                      {meal.protein === 'none' ? meal.carbBase : meal.protein}
-                    </span>
-                  </SheetRow>
-                ))}
-                {candidates.length === 0 && (
-                  <div className="py-4 text-[13.5px] text-neutral-600">
-                    Nothing else in the library fits this slot yet.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {sheet.mode === 'skip' && (
-              <div className="mt-[14px] flex flex-col gap-[6px]">
-                {SKIP_REASONS.map((reason) => (
-                  <SheetRow
-                    key={reason.value}
-                    onClick={() => {
-                      // Only "other" earns a second tap — the named reasons must stay one.
-                      if (reason.value === 'other') {
-                        setSkipNote('')
-                        setSheet({ ...sheet, mode: 'skip-note' })
-                        return
-                      }
-                      markSkipped(sheet.weekStart, sheet.index, reason.value)
-                    }}
-                    className="rounded-[14px]"
-                  >
-                    {reason.label}
-                  </SheetRow>
-                ))}
-              </div>
-            )}
-
-            {sheet.mode === 'skip-note' && (
-              <div className="mt-[14px] flex flex-col gap-[6px]">
-                <input
-                  type="text"
-                  value={skipNote}
-                  onChange={(e) => setSkipNote(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      markSkipped(sheet.weekStart, sheet.index, 'other', skipNote)
-                    }
-                  }}
-                  placeholder="Freezer raid, out late…"
-                  maxLength={80}
-                  autoFocus
-                  className="input text-[16px]"
-                />
-                <SheetRow
-                  onClick={() =>
-                    markSkipped(sheet.weekStart, sheet.index, 'other', skipNote)
-                  }
-                  className="rounded-[14px]"
-                >
-                  Save
-                </SheetRow>
-                <SheetRow
-                  onClick={() => markSkipped(sheet.weekStart, sheet.index, 'other')}
-                  className="rounded-[14px] text-neutral-600"
-                >
-                  Skip without a note
-                </SheetRow>
-              </div>
-            )}
-          </BottomSheet>
-        )}
-
-        {editor && (
-          <MealEditor
-            meal={editor.meal}
-            catalog={catalog}
-            warning={editor.meal ? portionWarning(store.stats.get(editor.meal.id)) : null}
-            used={!!editor.meal && store.usedMealIds.has(editor.meal.id)}
-            onCancel={() => setEditor(null)}
-            onArchive={archiveMeal}
-            onRestore={restoreMeal}
-            onDelete={setConfirmDelete}
-            onSave={(meal) => {
-              const isNew = !editor.meal
-              store.saveMeal({ ...meal, id: meal.id || newId() })
-              setEditor(null)
-              setScreen('library')
-              say(isNew ? `${meal.name} is in the larder.` : `${meal.name} updated.`)
-            }}
           />
         )}
 
-        {/* Above the editor's z-[12], since deleting can be started from inside it. */}
-        {confirmDelete && (
-          <div className="absolute inset-0 z-[14]">
-          <BottomSheet
-            kicker="Meals"
-            title={`Delete ${confirmDelete.name}?`}
-            note="No week has ever used it, so nothing’s lost — but this one doesn’t come back."
-            onClose={() => setConfirmDelete(null)}
-          >
-            <div className="mt-4 flex flex-col gap-[7px]">
-              <SheetRow
-                onClick={() => {
-                  store.deleteMeal(confirmDelete.id)
-                  setConfirmDelete(null)
-                  setEditor(null)
-                  say(`${confirmDelete.name} is gone.`)
-                }}
-                className="flex items-center gap-3 text-accent-700"
-              >
-                <span className="text-[15px]">🗑️</span> Yes, delete it
-              </SheetRow>
-              <SheetRow
-                onClick={() => setConfirmDelete(null)}
-                className="flex items-center gap-3"
-              >
-                <span className="text-[15px]">↩️</span> Keep it after all
-              </SheetRow>
-            </div>
-          </BottomSheet>
-          </div>
+        {library.editing && (
+          <MealEditor
+            meal={library.editing.meal}
+            catalog={library.catalog}
+            warning={library.editorWarning}
+            used={library.editorMealInUse}
+            onCancel={library.closeEditor}
+            onArchive={library.archiveMeal}
+            onRestore={library.restoreMeal}
+            onDelete={library.requestDelete}
+            onSave={library.saveMeal}
+          />
+        )}
+
+        {library.confirmDelete && (
+          <DeleteMealSheet
+            meal={library.confirmDelete}
+            onConfirm={library.deleteMeal}
+            onCancel={library.cancelDelete}
+          />
         )}
 
         {toast && <Toast message={toast} />}

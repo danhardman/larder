@@ -13,12 +13,12 @@ built against a subset of the spec. The app runs, 28 tests pass, `tsc -b` is cle
 
 | Area | Where | State |
 |---|---|---|
-| Domain types | `src/types.ts` | Match the spec almost exactly — `Meal`, `MealIngredient`, `Slot`, `WeekPlan`, all enums |
+| Domain types | `src/types/` | Match the spec almost exactly — `Meal`, `MealIngredient`, `Slot`, `WeekPlan`, all enums |
 | Plan generator | `src/lib/generatePlan.ts` | Pure, seeded, season filters, no-dinner-repeats, protein/carb variety, recency window, breakfast/lunch rotation, locked-slot pass-through. 11 tests |
 | Shopping list | `src/lib/shoppingList.ts` | Pure, groups by `(name, unit)`, sums, per-meal breakdown, text format. 5 tests |
 | Stats + portion warnings | `src/lib/stats.ts` | `statsByMeal`, `portionWarning` with the 3-rated-cook floor |
-| Tick-off tracking | `src/App.tsx`, `src/screens/WeeksScreen.tsx` | eaten/skipped + skip reasons + optional, skippable portion rating |
-| Meal CRUD | `src/components/MealEditor.tsx` | Create/edit/archive/restore/delete, delete guarded by `usedMealIds` |
+| Tick-off tracking | `src/features/weeks/` (`useSlotActions.ts`, `SlotSheet.tsx`, `LiveWeek.tsx`) | eaten/skipped + skip reasons + optional, skippable portion rating |
+| Meal CRUD | `src/features/library/` (`MealEditor.tsx`, `useLibrary.ts`) | Create/edit/archive/restore/delete, delete guarded by `usedMealIds` |
 | Setup docs | `docs/firebase-setup.md`, `docs/cloudflare-pages-setup.md` | Already written and accurate — the stages below point at them rather than repeating them |
 
 **The gaps:** no Firebase at all (SDK installed, never imported), no household scoping, no auth, no real
@@ -35,6 +35,10 @@ ingredient catalog, no Settings screen, no insights view, plus dead stubs (`effo
 - **Meal `stats`:** stay **derived** (`src/lib/stats.ts`), not denormalised onto the meal doc. The spec's
   rollup is a read-optimisation for a dataset this app won't reach for years; deriving avoids
   write-amplification and drift. Revisit if reads get slow. *(Deliberate deviation from spec §3.)*
+- **Layout (tidy-up before Stage 2, Sep 2026):** UI code is grouped by feature under `src/features/`,
+  each feature owning its screen, hooks and sub-components; `src/types/` is the persisted domain model;
+  `src/lib/` stays pure and tested. `README.md` has the folder map. Stage 2 still only touches
+  `src/state/store.tsx`.
 
 ---
 
@@ -58,14 +62,14 @@ or needs a Cloudflare Pages Function proxy.
 **My work — done.** Rather than a separate throwaway page, the whole app is gated behind sign-in, so the
 spike exercises the real flow:
 
-- `src/lib/firebase.ts` — app + auth init from the `VITE_FIREBASE_*` env vars, plus a `missingConfig`
+- `src/state/firebase.ts` — app + auth init from the `VITE_FIREBASE_*` env vars, plus a `missingConfig`
   export so an unset Cloudflare variable shows up as a message rather than a blank screen.
 - `src/state/auth.tsx` — `AuthProvider` / `useAuth`. `signInWithPopup` is called **directly in the click
   handler with no preceding `await`** (Safari's popup blocker kills it otherwise).
-- `src/screens/SignInScreen.tsx` — the Google button and the failure readout (error code + message).
+- `src/features/auth/SignInScreen.tsx` — the Google button and the failure readout (error code + message).
   The **Try redirect instead** button and the standalone/browser diagnostics line were spike-only and
   have been removed.
-- `src/components/AuthGate.tsx` — renders the sign-in screen until there's a user. It also adds a
+- `src/features/auth/AuthGate.tsx` — renders the sign-in screen until there's a user. It also adds a
   spike-only account pill (top right) with **Sign out**, since there's no Settings screen until Stage 5
   and without it you can't re-test sign-in on the phone.
 - `public/_redirects` and `public/_headers` (`cloudflare-pages-setup.md` §3).
@@ -98,7 +102,7 @@ Two configuration traps surfaced while testing, both now written up in `firebase
   popup surfaces as `auth/popup-closed-by-user` instead of a promise that never settles. Chrome still
   logs a COOP warning during sign-in — that comes from Google's accounts page, and is noise.
 
-**Still carried forward:** the account pill in `src/components/AuthGate.tsx` stays until Stage 5 gives
+**Still carried forward:** the account pill in `src/features/auth/AuthGate.tsx` stays until Stage 5 gives
 it a real Settings screen, and there is still no household check — any Google account gets in until
 Stage 3 adds membership.
 
@@ -111,9 +115,9 @@ pure `src/lib/` modules the Firestore migration won't touch, so none of it gets 
 
 1. **Season is wrong for future weeks.** `src/state/store.tsx:52` passes `currentSeason()` when drafting
    *any* week — a plan drafted in late February for a March week gets winter meals. Derive the season from
-   the week being planned, via the existing `seasonForMonth` in `src/lib/dates.ts`.
-2. **`skipNote` is dead.** Declared at `src/types.ts:54`, never written or read. Wire a free-text input
-   into the skip sheet (`src/App.tsx`, `mode: 'skip'`), shown only for the `other` reason — per the spec's
+   the week being planned, via the existing `seasonForMonth` (now `src/lib/seasons.ts`).
+2. **`skipNote` is dead.** Declared on `Slot` (now `src/types/plan.ts`), never written or read. Wire a free-text input
+   into the skip sheet (now `src/features/weeks/SlotSheet.tsx`, `mode: 'skip'`), shown only for the `other` reason — per the spec's
    "must not add friction" rule.
 3. **`statsByMeal` and `portionWarning` are untested.** `src/lib/stats.test.ts` only covers `mealsInUse`.
    Add cases for the eaten/skipped split, the `timesRated` denominator, and the 3-cook floor.
@@ -127,9 +131,9 @@ the target week, not today.
 
 All four done. 43 tests across 5 files, `tsc -b` and `oxlint` clean.
 
-- **Season** — new `seasonForWeek` in `src/lib/dates.ts`. A week takes the season of the month it
+- **Season** — new `seasonForWeek` (now `src/lib/seasons.ts`). A week takes the season of the month it
   *starts* in, so a Mon-23-Feb week stays winter even though it reaches March; the rule is deliberate
-  and commented. `src/state/store.tsx` drafts with it, and `src/App.tsx` no longer holds a single
+  and commented. `src/state/store.tsx` drafts with it, and the UI (now `src/features/weeks/`) no longer holds a single
   module-level `currentSeason()` — the season label, the thin-library hint, the re-roll and the
   pick-from-library candidate list each derive it from the week they actually act on.
 - **`skipNote`** — "Something else" is now the only skip reason that costs a second tap: it opens a
@@ -161,7 +165,7 @@ to avoid this — so it happens in one deliberate stage rather than leaking thro
 
 **My work:**
 
-- `src/lib/firebase.ts` — init app, Firestore with **offline persistence enabled** (spec §5: the shopping
+- `src/state/firebase.ts` — init app, Firestore with **offline persistence enabled** (spec §5: the shopping
   list must work in a supermarket with no signal), and `connectAuthEmulator` / `connectFirestoreEmulator`
   behind `import.meta.env.DEV` so local dev never touches production data.
 - **Write `firestore.rules`** — read/write under `/households/{hid}/**` only if the auth token's
@@ -171,7 +175,7 @@ to avoid this — so it happens in one deliberate stage rather than leaking thro
   `/households/{hid}`, keeping the `useLarder()` interface **unchanged** so no screen has to change. That
   constraint is what makes this stage reviewable — the UI should behave identically afterwards.
 - `settings` moves onto the household doc; `ticked` (shopping ticks) onto the week plan doc.
-- **Seed script** (`scripts/seed.ts`, plain Node) writing `src/lib/seedLibrary.ts`'s 12 meals into the
+- **Seed script** (`scripts/seed.ts`, plain Node) writing `src/data/seedLibrary.ts`'s 12 meals into the
   emulator.
 - **One-time localStorage → Firestore import**, so prototype data you've already entered survives.
 
@@ -208,9 +212,9 @@ I'll ask you to pick when we reach this stage.
 
 ## Stage 4 — Real ingredient catalog
 
-Spec §3. Today `ingredientId` is faked as `name.toLowerCase()` (`src/components/MealEditor.tsx:35`, `:91`)
-and the autocomplete list is derived on the fly from meal names (`src/App.tsx:211-219`). The `Ingredient`
-interface at `src/types.ts:34` is never imported by anything.
+Spec §3. Today `ingredientId` is faked as `name.toLowerCase()` (`blankIngredient` and the save path in `src/features/library/MealEditor.tsx`)
+and the autocomplete list is derived on the fly from meal names (`src/features/library/ingredientCatalog.ts`). The `Ingredient`
+interface in `src/types/meal.ts` is never imported by anything.
 
 **This is a correctness bug, not tidiness:** `buildShoppingList` keys on the raw `item.name`
 (`src/lib/shoppingList.ts:35`), so "Chicken thighs" and "chicken thighs" become two separate lines that
@@ -230,7 +234,7 @@ one summed line.
 ## Stage 5 — Settings screen
 
 Spec §6. `recencyWindowWeeks` and `rotationSize` are already plumbed end-to-end into the generator, and
-`updateSettings` exists at `src/state/store.tsx:133` but **is never called by anything**. Mostly a form.
+`updateSettings` exists in `src/state/store.tsx` but **is never called by anything**. Mostly a form.
 
 - Fourth tab in `src/components/TabBar.tsx` (currently three: weeks / library / shop).
 - Recency window + rotation size controls, household members list, sign-out.
@@ -261,13 +265,13 @@ the *capture* is already in place, not because it will read well immediately.
 
 Lowest-value items, batched last so you can stop before them without losing anything.
 
-- **Effort-based weekday weighting.** `effort` is typed (`src/types.ts:30`) and round-tripped
+- **Effort-based weekday weighting.** `effort` is typed (`Meal` in `src/types/meal.ts`) and round-tripped
   (`MealEditor.tsx:102`) but has no UI and nothing reads it. Add the editor control, then weight `quick`
   toward weekdays and `involved` toward weekends in `scoreDinner` (`src/lib/generatePlan.ts:52`).
 - **Summed ↔ expanded toggle** on the shopping list (spec §5) — the breakdown is currently permanently
-  inline (`src/screens/ShoppingScreen.tsx:86`).
+  inline (`src/features/shopping/ShoppingScreen.tsx`).
 - **Shopping list for an arbitrary week** — only the next accepted week is reachable today
-  (`src/App.tsx:126-129`).
+  (`src/features/shopping/useShopping.ts`).
 - **PWA raster icons.** `vite.config.ts` ships only `favicon.svg`; iOS home-screen install wants PNGs
   (192/512 + apple-touch-icon).
 

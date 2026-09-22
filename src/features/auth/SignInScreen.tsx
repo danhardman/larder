@@ -1,5 +1,5 @@
-import { useAuth } from '../state/auth'
-import { missingConfig } from '../lib/firebase'
+import { useAuth } from '../../state/auth'
+import { missingConfig } from '../../state/firebase'
 
 export function SignInScreen() {
   const { error, signInWithGoogle } = useAuth()

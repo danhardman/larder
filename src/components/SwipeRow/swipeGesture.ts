@@ -1,3 +1,9 @@
+/**
+ * The maths behind `SwipeRow`: when a drag counts as a swipe, where a released
+ * card settles, and how far it can be pulled past its limits. Kept separate so
+ * it can be tested without a DOM.
+ */
+
 /** Pointer travel (px) past which a gesture is a swipe, not a tap. */
 export const SWIPE_SLOP = 6
 
